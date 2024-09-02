@@ -16,18 +16,18 @@
 #include <sys/param.h>
 #endif
 
-#include "ubusd.h"
+#include "homebusd.h"
 
 #define USES_EXTERNAL_BUFFER ~0U
 
-static struct ubus_msg_buf *ubus_msg_ref(struct ubus_msg_buf *ub)
+static struct homebus_msg_buf *homebus_msg_ref(struct homebus_msg_buf *ub)
 {
-	struct ubus_msg_buf *new_ub;
+	struct homebus_msg_buf *new_ub;
 	if (ub->refcount == USES_EXTERNAL_BUFFER) {
-		new_ub = ubus_msg_new(ub->data, ub->len, false);
+		new_ub = homebus_msg_new(ub->data, ub->len, false);
 		if (!new_ub)
 			return NULL;
-		memcpy(&new_ub->hdr, &ub->hdr, sizeof(struct ubus_msghdr));
+		memcpy(&new_ub->hdr, &ub->hdr, sizeof(struct homebus_msghdr));
 		new_ub->fd = ub->fd;
 		return new_ub;
 	}
@@ -36,9 +36,9 @@ static struct ubus_msg_buf *ubus_msg_ref(struct ubus_msg_buf *ub)
 	return ub;
 }
 
-struct ubus_msg_buf *ubus_msg_new(void *data, int len, bool shared)
+struct homebus_msg_buf *homebus_msg_new(void *data, int len, bool shared)
 {
-	struct ubus_msg_buf *ub;
+	struct homebus_msg_buf *ub;
 	int buflen = sizeof(*ub);
 
 	if (!shared)
@@ -64,7 +64,7 @@ struct ubus_msg_buf *ubus_msg_new(void *data, int len, bool shared)
 	return ub;
 }
 
-void ubus_msg_free(struct ubus_msg_buf *ub)
+void homebus_msg_free(struct homebus_msg_buf *ub)
 {
 	switch (ub->refcount) {
 	case 1:
@@ -80,12 +80,12 @@ void ubus_msg_free(struct ubus_msg_buf *ub)
 	}
 }
 
-ssize_t ubus_msg_writev(int fd, struct ubus_msg_buf *ub, size_t offset)
+ssize_t homebus_msg_writev(int fd, struct homebus_msg_buf *ub, size_t offset)
 {
 	uint8_t fd_buf[CMSG_SPACE(sizeof(int))] = { 0 };
 	static struct iovec iov[2];
 	struct msghdr msghdr = { 0 };
-	struct ubus_msghdr hdr;
+	struct homebus_msghdr hdr;
 	struct cmsghdr *cmsg;
 	ssize_t ret;
 	int *pfd;
@@ -133,41 +133,41 @@ ssize_t ubus_msg_writev(int fd, struct ubus_msg_buf *ub, size_t offset)
 	return ret;
 }
 
-void ubus_msg_list_free(struct ubus_msg_buf_list *ubl)
+void homebus_msg_list_free(struct homebus_msg_buf_list *ubl)
 {
 	list_del_init(&ubl->list);
-	ubus_msg_free(ubl->msg);
+	homebus_msg_free(ubl->msg);
 	free(ubl);
 }
 
-static void ubus_msg_enqueue(struct ubus_client *cl, struct ubus_msg_buf *ub)
+static void homebus_msg_enqueue(struct homebus_client *cl, struct homebus_msg_buf *ub)
 {
-	struct ubus_msg_buf_list *ubl;
+	struct homebus_msg_buf_list *ubl;
 
-	if (cl->txq_len + ub->len > UBUS_CLIENT_MAX_TXQ_LEN)
+	if (cl->txq_len + ub->len > HOMEBUS_CLIENT_MAX_TXQ_LEN)
 		return;
 
-	ubl = calloc(1, sizeof(struct ubus_msg_buf_list));
+	ubl = calloc(1, sizeof(struct homebus_msg_buf_list));
 	if (!ubl)
 		return;
 
 	INIT_LIST_HEAD(&ubl->list);
-	ubl->msg = ubus_msg_ref(ub);
+	ubl->msg = homebus_msg_ref(ub);
 
 	list_add_tail(&ubl->list, &cl->tx_queue);
 	cl->txq_len += ub->len;
 }
 
 /* takes the msgbuf reference */
-void ubus_msg_send(struct ubus_client *cl, struct ubus_msg_buf *ub)
+void homebus_msg_send(struct homebus_client *cl, struct homebus_msg_buf *ub)
 {
 	ssize_t written;
 
-	if (ub->hdr.type != UBUS_MSG_MONITOR)
-		ubusd_monitor_message(cl, ub, true);
+	if (ub->hdr.type != HOMEBUS_MSG_MONITOR)
+		homebusd_monitor_message(cl, ub, true);
 
 	if (list_empty(&cl->tx_queue)) {
-		written = ubus_msg_writev(cl->sock.fd, ub, 0);
+		written = homebus_msg_writev(cl->sock.fd, ub, 0);
 
 		if (written < 0)
 			written = 0;
@@ -181,5 +181,5 @@ void ubus_msg_send(struct ubus_client *cl, struct ubus_msg_buf *ub)
 		/* get an event once we can write to the socket again */
 		uloop_fd_add(&cl->sock, ULOOP_READ | ULOOP_WRITE | ULOOP_EDGE_TRIGGER);
 	}
-	ubus_msg_enqueue(cl, ub);
+	homebus_msg_enqueue(cl, ub);
 }

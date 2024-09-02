@@ -12,33 +12,33 @@
  */
 
 #include <arpa/inet.h>
-#include "ubusd.h"
+#include "homebusd.h"
 
 static struct avl_tree patterns;
-static struct ubus_object *event_obj;
+static struct homebus_object *event_obj;
 static int event_seq = 0;
 static int obj_event_seq = 1;
 
 struct event_source {
 	struct list_head list;
-	struct ubus_object *obj;
+	struct homebus_object *obj;
 	struct avl_node avl;
 	bool partial;
 };
 
-static void ubusd_delete_event_source(struct event_source *evs)
+static void homebusd_delete_event_source(struct event_source *evs)
 {
 	list_del(&evs->list);
 	avl_delete(&patterns, &evs->avl);
 	free(evs);
 }
 
-void ubusd_event_cleanup_object(struct ubus_object *obj)
+void homebusd_event_cleanup_object(struct homebus_object *obj)
 {
 	struct event_source *ev, *tmp;
 
 	list_for_each_entry_safe(ev, tmp, &obj->events, list) {
-		ubusd_delete_event_source(ev);
+		homebusd_delete_event_source(ev);
 	}
 }
 
@@ -53,10 +53,10 @@ static struct blobmsg_policy evr_policy[] = {
 	[EVREG_OBJECT] = { .name = "object", .type = BLOBMSG_TYPE_INT32 },
 };
 
-static int ubusd_alloc_event_pattern(struct ubus_client *cl, struct blob_attr *msg)
+static int homebusd_alloc_event_pattern(struct homebus_client *cl, struct blob_attr *msg)
 {
 	struct event_source *ev;
-	struct ubus_object *obj;
+	struct homebus_object *obj;
 	struct blob_attr *attr[EVREG_LAST];
 	char *pattern, *name;
 	uint32_t id;
@@ -64,22 +64,22 @@ static int ubusd_alloc_event_pattern(struct ubus_client *cl, struct blob_attr *m
 	int len;
 
 	if (!msg)
-		return UBUS_STATUS_INVALID_ARGUMENT;
+		return HOMEBUS_STATUS_INVALID_ARGUMENT;
 
 	blobmsg_parse(evr_policy, EVREG_LAST, attr, blob_data(msg), blob_len(msg));
 	if (!attr[EVREG_OBJECT] || !attr[EVREG_PATTERN])
-		return UBUS_STATUS_INVALID_ARGUMENT;
+		return HOMEBUS_STATUS_INVALID_ARGUMENT;
 
 	id = blobmsg_get_u32(attr[EVREG_OBJECT]);
-	if (id < UBUS_SYSTEM_OBJECT_MAX)
-		return UBUS_STATUS_PERMISSION_DENIED;
+	if (id < HOMEBUS_SYSTEM_OBJECT_MAX)
+		return HOMEBUS_STATUS_PERMISSION_DENIED;
 
-	obj = ubusd_find_object(id);
+	obj = homebusd_find_object(id);
 	if (!obj)
-		return UBUS_STATUS_NOT_FOUND;
+		return HOMEBUS_STATUS_NOT_FOUND;
 
 	if (obj->client != cl)
-		return UBUS_STATUS_PERMISSION_DENIED;
+		return HOMEBUS_STATUS_PERMISSION_DENIED;
 
 	pattern = blobmsg_data(attr[EVREG_PATTERN]);
 
@@ -90,12 +90,12 @@ static int ubusd_alloc_event_pattern(struct ubus_client *cl, struct blob_attr *m
 		len--;
 	}
 
-	if (pattern[0] && ubusd_acl_check(cl, pattern, NULL, UBUS_ACL_LISTEN))
-		return UBUS_STATUS_PERMISSION_DENIED;
+	if (pattern[0] && homebusd_acl_check(cl, pattern, NULL, HOMEBUS_ACL_LISTEN))
+		return HOMEBUS_STATUS_PERMISSION_DENIED;
 
 	ev = calloc(1, sizeof(*ev) + len + 1);
 	if (!ev)
-		return UBUS_STATUS_NO_DATA;
+		return HOMEBUS_STATUS_NO_DATA;
 
 	list_add(&ev->list, &obj->events);
 	ev->obj = obj;
@@ -108,8 +108,8 @@ static int ubusd_alloc_event_pattern(struct ubus_client *cl, struct blob_attr *m
 	return 0;
 }
 
-static void ubusd_send_event_msg(struct ubus_msg_buf **ub, struct ubus_client *cl,
-				 struct ubus_object *obj, const char *id,
+static void homebusd_send_event_msg(struct homebus_msg_buf **ub, struct homebus_client *cl,
+				 struct homebus_object *obj, const char *id,
 				 event_fill_cb fill_cb, void *cb_priv)
 {
 	uint32_t *objid_ptr;
@@ -126,7 +126,7 @@ static void ubusd_send_event_msg(struct ubus_msg_buf **ub, struct ubus_client *c
 
 	if (!*ub) {
 		*ub = fill_cb(cb_priv, id);
-		(*ub)->hdr.type = UBUS_MSG_INVOKE;
+		(*ub)->hdr.type = HOMEBUS_MSG_INVOKE;
 		(*ub)->hdr.peer = 0;
 	}
 
@@ -134,18 +134,18 @@ static void ubusd_send_event_msg(struct ubus_msg_buf **ub, struct ubus_client *c
 	*objid_ptr = htonl(obj->id.id);
 
 	(*ub)->hdr.seq = ++event_seq;
-	ubus_msg_send(obj->client, *ub);
+	homebus_msg_send(obj->client, *ub);
 }
 
-int ubusd_send_event(struct ubus_client *cl, const char *id,
+int homebusd_send_event(struct homebus_client *cl, const char *id,
 		     event_fill_cb fill_cb, void *cb_priv)
 {
-	struct ubus_msg_buf *ub = NULL;
+	struct homebus_msg_buf *ub = NULL;
 	struct event_source *ev;
 	int match_len = 0;
 
-	if (ubusd_acl_check(cl, id, NULL, UBUS_ACL_SEND))
-		return UBUS_STATUS_PERMISSION_DENIED;
+	if (homebusd_acl_check(cl, id, NULL, HOMEBUS_ACL_SEND))
+		return HOMEBUS_STATUS_PERMISSION_DENIED;
 
 	obj_event_seq++;
 
@@ -159,7 +159,7 @@ int ubusd_send_event(struct ubus_client *cl, const char *id,
 		int cur_match_len;
 		bool full_match;
 
-		full_match = ubus_strmatch_len(id, key, &cur_match_len);
+		full_match = homebus_strmatch_len(id, key, &cur_match_len);
 		if (cur_match_len < match_len)
 			break;
 
@@ -173,11 +173,11 @@ int ubusd_send_event(struct ubus_client *cl, const char *id,
 				continue;
 		}
 
-		ubusd_send_event_msg(&ub, cl, ev->obj, id, fill_cb, cb_priv);
+		homebusd_send_event_msg(&ub, cl, ev->obj, id, fill_cb, cb_priv);
 	}
 
 	if (ub)
-		ubus_msg_free(ub);
+		homebus_msg_free(ub);
 
 	return 0;
 }
@@ -193,81 +193,81 @@ static struct blobmsg_policy ev_policy[] = {
 	[EVMSG_DATA] = { .name = "data", .type = BLOBMSG_TYPE_TABLE },
 };
 
-static struct ubus_msg_buf *
-ubusd_create_event_from_msg(void *priv, const char *id)
+static struct homebus_msg_buf *
+homebusd_create_event_from_msg(void *priv, const char *id)
 {
 	struct blob_attr *msg = priv;
 
 	blob_buf_init(&b, 0);
-	blob_put_int32(&b, UBUS_ATTR_OBJID, 0);
-	blob_put_string(&b, UBUS_ATTR_METHOD, id);
-	blob_put(&b, UBUS_ATTR_DATA, blobmsg_data(msg), blobmsg_data_len(msg));
+	blob_put_int32(&b, HOMEBUS_ATTR_OBJID, 0);
+	blob_put_string(&b, HOMEBUS_ATTR_METHOD, id);
+	blob_put(&b, HOMEBUS_ATTR_DATA, blobmsg_data(msg), blobmsg_data_len(msg));
 
-	return ubus_msg_new(b.head, blob_raw_len(b.head), true);
+	return homebus_msg_new(b.head, blob_raw_len(b.head), true);
 }
 
-static int ubusd_forward_event(struct ubus_client *cl, struct blob_attr *msg)
+static int homebusd_forward_event(struct homebus_client *cl, struct blob_attr *msg)
 {
 	struct blob_attr *data;
 	struct blob_attr *attr[EVMSG_LAST];
 	const char *id;
 
 	if (!msg)
-		return UBUS_STATUS_INVALID_ARGUMENT;
+		return HOMEBUS_STATUS_INVALID_ARGUMENT;
 
 	blobmsg_parse(ev_policy, EVMSG_LAST, attr, blob_data(msg), blob_len(msg));
 	if (!attr[EVMSG_ID] || !attr[EVMSG_DATA])
-		return UBUS_STATUS_INVALID_ARGUMENT;
+		return HOMEBUS_STATUS_INVALID_ARGUMENT;
 
 	id = blobmsg_data(attr[EVMSG_ID]);
 	data = attr[EVMSG_DATA];
 
-	if (!strncmp(id, "ubus.", 5))
-		return UBUS_STATUS_PERMISSION_DENIED;
+	if (!strncmp(id, "homebus.", 5))
+		return HOMEBUS_STATUS_PERMISSION_DENIED;
 
-	return ubusd_send_event(cl, id, ubusd_create_event_from_msg, data);
+	return homebusd_send_event(cl, id, homebusd_create_event_from_msg, data);
 }
 
-static int ubusd_event_recv(struct ubus_client *cl, struct ubus_msg_buf *ub, const char *method, struct blob_attr *msg)
+static int homebusd_event_recv(struct homebus_client *cl, struct homebus_msg_buf *ub, const char *method, struct blob_attr *msg)
 {
 	if (!strcmp(method, "register"))
-		return ubusd_alloc_event_pattern(cl, msg);
+		return homebusd_alloc_event_pattern(cl, msg);
 
 	if (!strcmp(method, "send"))
-		return ubusd_forward_event(cl, msg);
+		return homebusd_forward_event(cl, msg);
 
-	return UBUS_STATUS_INVALID_COMMAND;
+	return HOMEBUS_STATUS_INVALID_COMMAND;
 }
 
-static struct ubus_msg_buf *
-ubusd_create_object_event_msg(void *priv, const char *id)
+static struct homebus_msg_buf *
+homebusd_create_object_event_msg(void *priv, const char *id)
 {
-	struct ubus_object *obj = priv;
+	struct homebus_object *obj = priv;
 	void *s;
 
 	blob_buf_init(&b, 0);
-	blob_put_int32(&b, UBUS_ATTR_OBJID, 0);
-	blob_put_string(&b, UBUS_ATTR_METHOD, id);
-	s = blob_nest_start(&b, UBUS_ATTR_DATA);
+	blob_put_int32(&b, HOMEBUS_ATTR_OBJID, 0);
+	blob_put_string(&b, HOMEBUS_ATTR_METHOD, id);
+	s = blob_nest_start(&b, HOMEBUS_ATTR_DATA);
 	blobmsg_add_u32(&b, "id", obj->id.id);
 	blobmsg_add_string(&b, "path", obj->path.key);
 	blob_nest_end(&b, s);
 
-	return ubus_msg_new(b.head, blob_raw_len(b.head), true);
+	return homebus_msg_new(b.head, blob_raw_len(b.head), true);
 }
 
-void ubusd_send_obj_event(struct ubus_object *obj, bool add)
+void homebusd_send_obj_event(struct homebus_object *obj, bool add)
 {
-	const char *id = add ? "ubus.object.add" : "ubus.object.remove";
+	const char *id = add ? "homebus.object.add" : "homebus.object.remove";
 
-	ubusd_send_event(NULL, id, ubusd_create_object_event_msg, obj);
+	homebusd_send_event(NULL, id, homebusd_create_object_event_msg, obj);
 }
 
-void ubusd_event_init(void)
+void homebusd_event_init(void)
 {
-	ubus_init_string_tree(&patterns, true);
-	event_obj = ubusd_create_object_internal(NULL, UBUS_SYSTEM_OBJECT_EVENT);
+	homebus_init_string_tree(&patterns, true);
+	event_obj = homebusd_create_object_internal(NULL, HOMEBUS_SYSTEM_OBJECT_EVENT);
 	if (event_obj != NULL)
-		event_obj->recv_msg = ubusd_event_recv;
+		event_obj->recv_msg = homebusd_event_recv;
 }
 

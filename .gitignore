@@ -7,6 +7,6 @@ CMakeFiles
 *.dylib
 examples/server
 examples/client
-ubusd
-ubus
+homebusd
+homebus
 install_manifest.txt

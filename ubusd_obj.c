@@ -11,16 +11,16 @@
  * GNU General Public License for more details.
  */
 
-#include "ubusd.h"
-#include "ubusd_obj.h"
+#include "homebusd.h"
+#include "homebusd_obj.h"
 
 struct avl_tree obj_types;
 struct avl_tree objects;
 struct avl_tree path;
 
-static void ubus_unref_object_type(struct ubus_object_type *type)
+static void homebus_unref_object_type(struct homebus_object_type *type)
 {
-	struct ubus_method *m, *tmp;
+	struct homebus_method *m, *tmp;
 
 	if (--type->refcount > 0)
 		return;
@@ -30,13 +30,13 @@ static void ubus_unref_object_type(struct ubus_object_type *type)
 		free(m);
 	}
 
-	ubus_free_id(&obj_types, &type->id);
+	homebus_free_id(&obj_types, &type->id);
 	free(type);
 }
 
-static bool ubus_create_obj_method(struct ubus_object_type *type, struct blob_attr *attr)
+static bool homebus_create_obj_method(struct homebus_object_type *type, struct blob_attr *attr)
 {
-	struct ubus_method *m;
+	struct homebus_method *m;
 	int bloblen = blob_raw_len(attr);
 
 	m = calloc(1, sizeof(*m) + bloblen);
@@ -50,9 +50,9 @@ static bool ubus_create_obj_method(struct ubus_object_type *type, struct blob_at
 	return true;
 }
 
-static struct ubus_object_type *ubus_create_obj_type(struct blob_attr *sig)
+static struct homebus_object_type *homebus_create_obj_type(struct blob_attr *sig)
 {
-	struct ubus_object_type *type;
+	struct homebus_object_type *type;
 	struct blob_attr *pos;
 	size_t rem;
 
@@ -62,7 +62,7 @@ static struct ubus_object_type *ubus_create_obj_type(struct blob_attr *sig)
 
 	type->refcount = 1;
 
-	if (!ubus_alloc_id(&obj_types, &type->id, 0))
+	if (!homebus_alloc_id(&obj_types, &type->id, 0))
 		goto error_free;
 
 	INIT_LIST_HEAD(&type->methods);
@@ -71,14 +71,14 @@ static struct ubus_object_type *ubus_create_obj_type(struct blob_attr *sig)
 		if (!blobmsg_check_attr(pos, true))
 			goto error_unref;
 
-		if (!ubus_create_obj_method(type, pos))
+		if (!homebus_create_obj_method(type, pos))
 			goto error_unref;
 	}
 
 	return type;
 
 error_unref:
-	ubus_unref_object_type(type);
+	homebus_unref_object_type(type);
 	return NULL;
 
 error_free:
@@ -86,29 +86,29 @@ error_free:
 	return NULL;
 }
 
-static struct ubus_object_type *ubus_get_obj_type(uint32_t obj_id)
+static struct homebus_object_type *homebus_get_obj_type(uint32_t obj_id)
 {
-	struct ubus_object_type *type;
-	struct ubus_id *id;
+	struct homebus_object_type *type;
+	struct homebus_id *id;
 
-	id = ubus_find_id(&obj_types, obj_id);
+	id = homebus_find_id(&obj_types, obj_id);
 	if (!id)
 		return NULL;
 
-	type = container_of(id, struct ubus_object_type, id);
+	type = container_of(id, struct homebus_object_type, id);
 	type->refcount++;
 	return type;
 }
 
-struct ubus_object *ubusd_create_object_internal(struct ubus_object_type *type, uint32_t id)
+struct homebus_object *homebusd_create_object_internal(struct homebus_object_type *type, uint32_t id)
 {
-	struct ubus_object *obj;
+	struct homebus_object *obj;
 
 	obj = calloc(1, sizeof(*obj));
 	if (!obj)
 		return NULL;
 
-	if (!ubus_alloc_id(&objects, &obj->id, id))
+	if (!homebus_alloc_id(&objects, &obj->id, id))
 		goto error_free;
 
 	obj->type = type;
@@ -126,28 +126,28 @@ error_free:
 	return NULL;
 }
 
-struct ubus_object *ubusd_create_object(struct ubus_client *cl, struct blob_attr **attr)
+struct homebus_object *homebusd_create_object(struct homebus_client *cl, struct blob_attr **attr)
 {
-	struct ubus_object *obj;
-	struct ubus_object_type *type = NULL;
+	struct homebus_object *obj;
+	struct homebus_object_type *type = NULL;
 
-	if (attr[UBUS_ATTR_OBJTYPE])
-		type = ubus_get_obj_type(blob_get_u32(attr[UBUS_ATTR_OBJTYPE]));
-	else if (attr[UBUS_ATTR_SIGNATURE])
-		type = ubus_create_obj_type(attr[UBUS_ATTR_SIGNATURE]);
+	if (attr[HOMEBUS_ATTR_OBJTYPE])
+		type = homebus_get_obj_type(blob_get_u32(attr[HOMEBUS_ATTR_OBJTYPE]));
+	else if (attr[HOMEBUS_ATTR_SIGNATURE])
+		type = homebus_create_obj_type(attr[HOMEBUS_ATTR_SIGNATURE]);
 
-	obj = ubusd_create_object_internal(type, 0);
+	obj = homebusd_create_object_internal(type, 0);
 	if (type)
-		ubus_unref_object_type(type);
+		homebus_unref_object_type(type);
 
 	if (!obj)
 		return NULL;
 
-	if (attr[UBUS_ATTR_OBJPATH]) {
-		if (ubusd_acl_check(cl, blob_data(attr[UBUS_ATTR_OBJPATH]), NULL, UBUS_ACL_PUBLISH))
+	if (attr[HOMEBUS_ATTR_OBJPATH]) {
+		if (homebusd_acl_check(cl, blob_data(attr[HOMEBUS_ATTR_OBJPATH]), NULL, HOMEBUS_ACL_PUBLISH))
 			goto free;
 
-		obj->path.key = strdup(blob_data(attr[UBUS_ATTR_OBJPATH]));
+		obj->path.key = strdup(blob_data(attr[HOMEBUS_ATTR_OBJPATH]));
 		if (!obj->path.key)
 			goto free;
 
@@ -156,7 +156,7 @@ struct ubus_object *ubusd_create_object(struct ubus_client *cl, struct blob_attr
 			obj->path.key = NULL;
 			goto free;
 		}
-		ubusd_send_obj_event(obj, true);
+		homebusd_send_obj_event(obj, true);
 	}
 
 	obj->client = cl;
@@ -165,13 +165,13 @@ struct ubus_object *ubusd_create_object(struct ubus_client *cl, struct blob_attr
 	return obj;
 
 free:
-	ubusd_free_object(obj);
+	homebusd_free_object(obj);
 	return NULL;
 }
 
-void ubus_subscribe(struct ubus_object *obj, struct ubus_object *target)
+void homebus_subscribe(struct homebus_object *obj, struct homebus_object *target)
 {
-	struct ubus_subscription *s;
+	struct homebus_subscription *s;
 	bool first = list_empty(&target->subscribers);
 
 	s = calloc(1, sizeof(*s));
@@ -184,52 +184,52 @@ void ubus_subscribe(struct ubus_object *obj, struct ubus_object *target)
 	list_add(&s->target_list, &obj->target_list);
 
 	if (first)
-		ubus_notify_subscription(target);
+		homebus_notify_subscription(target);
 }
 
-void ubus_unsubscribe(struct ubus_subscription *s)
+void homebus_unsubscribe(struct homebus_subscription *s)
 {
-	struct ubus_object *obj = s->target;
+	struct homebus_object *obj = s->target;
 
 	list_del(&s->list);
 	list_del(&s->target_list);
 	free(s);
 
 	if (list_empty(&obj->subscribers))
-		ubus_notify_subscription(obj);
+		homebus_notify_subscription(obj);
 }
 
-void ubusd_free_object(struct ubus_object *obj)
+void homebusd_free_object(struct homebus_object *obj)
 {
-	struct ubus_subscription *s, *tmp;
+	struct homebus_subscription *s, *tmp;
 
 	list_for_each_entry_safe(s, tmp, &obj->target_list, target_list) {
-		ubus_unsubscribe(s);
+		homebus_unsubscribe(s);
 	}
 	list_for_each_entry_safe(s, tmp, &obj->subscribers, list) {
-		ubus_notify_unsubscribe(s);
+		homebus_notify_unsubscribe(s);
 	}
 
-	ubusd_event_cleanup_object(obj);
+	homebusd_event_cleanup_object(obj);
 	if (obj->path.key) {
-		ubusd_send_obj_event(obj, false);
+		homebusd_send_obj_event(obj, false);
 		avl_delete(&path, &obj->path);
 		free((void *) obj->path.key);
 	}
 	if (!list_empty(&obj->list))
 		list_del(&obj->list);
-	ubus_free_id(&objects, &obj->id);
+	homebus_free_id(&objects, &obj->id);
 	if (obj->type)
-		ubus_unref_object_type(obj->type);
+		homebus_unref_object_type(obj->type);
 	free(obj);
 }
 
-static void __constructor ubusd_obj_init(void)
+static void __constructor homebusd_obj_init(void)
 {
-	ubus_init_id_tree(&objects);
-	ubus_init_id_tree(&obj_types);
-	ubus_init_string_tree(&path, false);
-	ubusd_event_init();
-	ubusd_acl_init();
-	ubusd_monitor_init();
+	homebus_init_id_tree(&objects);
+	homebus_init_id_tree(&obj_types);
+	homebus_init_string_tree(&path, false);
+	homebusd_event_init();
+	homebusd_acl_init();
+	homebusd_monitor_init();
 }

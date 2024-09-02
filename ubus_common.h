@@ -11,15 +11,15 @@
  * GNU General Public License for more details.
  */
 
-#ifndef __UBUS_COMMON_H
-#define __UBUS_COMMON_H
+#ifndef __HOMEBUS_COMMON_H
+#define __HOMEBUS_COMMON_H
 
 #include <stdbool.h>
 
-#define UBUS_SIGNATURE_METHOD	(BLOBMSG_TYPE_LAST + 1)
-#define UBUS_SIGNATURE_END		(BLOBMSG_TYPE_LAST + 2)
+#define HOMEBUS_SIGNATURE_METHOD	(BLOBMSG_TYPE_LAST + 1)
+#define HOMEBUS_SIGNATURE_END		(BLOBMSG_TYPE_LAST + 2)
 
-static inline bool ubus_strmatch_len(const char *s1, const char *s2, int *len)
+static inline bool homebus_strmatch_len(const char *s1, const char *s2, int *len)
 {
 	for (*len = 0; s1[*len] == s2[*len]; (*len)++)
 		if (!s1[*len])

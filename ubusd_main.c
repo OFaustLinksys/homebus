@@ -15,16 +15,16 @@
 
 #include <libubox/usock.h>
 
-#include "ubusd.h"
+#include "homebusd.h"
 
-static void handle_client_disconnect(struct ubus_client *cl)
+static void handle_client_disconnect(struct homebus_client *cl)
 {
-	struct ubus_msg_buf_list *ubl, *ubl2;
+	struct homebus_msg_buf_list *ubl, *ubl2;
 	list_for_each_entry_safe(ubl, ubl2, &cl->tx_queue, list)
-		ubus_msg_list_free(ubl);
+		homebus_msg_list_free(ubl);
 
-	ubusd_monitor_disconnect(cl);
-	ubusd_proto_free_client(cl);
+	homebusd_monitor_disconnect(cl);
+	homebusd_proto_free_client(cl);
 	if (cl->pending_msg_fd >= 0)
 		close(cl->pending_msg_fd);
 	uloop_fd_delete(&cl->sock);
@@ -32,35 +32,35 @@ static void handle_client_disconnect(struct ubus_client *cl)
 	free(cl);
 }
 
-static void ubus_client_cmd_free(struct ubus_client_cmd *cmd)
+static void homebus_client_cmd_free(struct homebus_client_cmd *cmd)
 {
 	list_del(&cmd->list);
-	ubus_msg_free(cmd->msg);
+	homebus_msg_free(cmd->msg);
 	free(cmd);
 }
 
-static void ubus_client_cmd_queue_process(struct ubus_client *cl)
+static void homebus_client_cmd_queue_process(struct homebus_client *cl)
 {
-	struct ubus_client_cmd *cmd, *tmp;
+	struct homebus_client_cmd *cmd, *tmp;
 
 	list_for_each_entry_safe(cmd, tmp, &cl->cmd_queue, list) {
-		int ret = ubusd_cmd_lookup(cl, cmd);
+		int ret = homebusd_cmd_lookup(cl, cmd);
 
 		/* Stop if the last command caused buffering again */
 		if (ret == -2)
 			break;
 
-		ubus_client_cmd_free(cmd);
+		homebus_client_cmd_free(cmd);
 	}
 }
 
 static void client_cb(struct uloop_fd *sock, unsigned int events)
 {
-	struct ubus_client *cl = container_of(sock, struct ubus_client, sock);
+	struct homebus_client *cl = container_of(sock, struct homebus_client, sock);
 	uint8_t fd_buf[CMSG_SPACE(sizeof(int))] = { 0 };
 	struct msghdr msghdr = { 0 };
-	struct ubus_msg_buf *ub;
-	struct ubus_msg_buf_list *ubl, *ubl2;
+	struct homebus_msg_buf *ub;
+	struct homebus_msg_buf_list *ubl, *ubl2;
 	static struct iovec iov;
 	struct cmsghdr *cmsg;
 	int *pfd;
@@ -83,7 +83,7 @@ static void client_cb(struct uloop_fd *sock, unsigned int events)
 		ssize_t written;
 
 		ub = ubl->msg;
-		written = ubus_msg_writev(sock->fd, ub, cl->txq_ofs);
+		written = homebus_msg_writev(sock->fd, ub, cl->txq_ofs);
 		if (written < 0) {
 			switch(errno) {
 			case EINTR:
@@ -101,12 +101,12 @@ static void client_cb(struct uloop_fd *sock, unsigned int events)
 			break;
 
 		cl->txq_ofs = 0;
-		ubus_msg_list_free(ubl);
+		homebus_msg_list_free(ubl);
 	}
 
 	if (list_empty(&cl->tx_queue) && (events & ULOOP_WRITE)) {
 		/* Process queued commands */
-		ubus_client_cmd_queue_process(cl);
+		homebus_client_cmd_queue_process(cl);
 
 		/* prevent further ULOOP_WRITE events if we don't have data
 		 * to send anymore */
@@ -145,10 +145,10 @@ retry:
 
 		if (blob_raw_len(&cl->hdrbuf.data) < sizeof(struct blob_attr))
 			goto disconnect;
-		if (blob_pad_len(&cl->hdrbuf.data) > UBUS_MAX_MSGLEN)
+		if (blob_pad_len(&cl->hdrbuf.data) > HOMEBUS_MAX_MSGLEN)
 			goto disconnect;
 
-		cl->pending_msg = ubus_msg_new(NULL, blob_raw_len(&cl->hdrbuf.data), false);
+		cl->pending_msg = homebus_msg_new(NULL, blob_raw_len(&cl->hdrbuf.data), false);
 		if (!cl->pending_msg)
 			goto disconnect;
 
@@ -181,8 +181,8 @@ retry:
 		cl->pending_msg_fd = -1;
 		cl->pending_msg_offset = 0;
 		cl->pending_msg = NULL;
-		ubusd_monitor_message(cl, ub, false);
-		ubusd_proto_receive_message(cl, ub);
+		homebusd_monitor_message(cl, ub, false);
+		homebusd_proto_receive_message(cl, ub);
 		goto retry;
 	}
 
@@ -196,7 +196,7 @@ disconnect:
 
 static bool get_next_connection(int fd)
 {
-	struct ubus_client *cl;
+	struct homebus_client *cl;
 	int client_fd;
 
 	client_fd = accept(fd, NULL, 0);
@@ -210,7 +210,7 @@ static bool get_next_connection(int fd)
 		}
 	}
 
-	cl = ubusd_proto_new_client(client_fd, client_cb);
+	cl = homebusd_proto_new_client(client_fd, client_cb);
 	if (cl)
 		uloop_fd_add(&cl->sock, ULOOP_READ | ULOOP_EDGE_TRIGGER);
 	else
@@ -244,44 +244,44 @@ static int usage(const char *progname)
 
 static void sighup_handler(int sig)
 {
-	ubusd_acl_load();
+	homebusd_acl_load();
 }
 
 static void mkdir_sockdir()
 {
-	char *ubus_sock_dir, *tmp;
+	char *homebus_sock_dir, *tmp;
 
-	ubus_sock_dir = strdup(UBUS_UNIX_SOCKET);
-	tmp = strrchr(ubus_sock_dir, '/');
+	homebus_sock_dir = strdup(HOMEBUS_UNIX_SOCKET);
+	tmp = strrchr(homebus_sock_dir, '/');
 	if (tmp) {
 		*tmp = '\0';
-		mkdir(ubus_sock_dir, 0755);
+		mkdir(homebus_sock_dir, 0755);
 	}
-	free(ubus_sock_dir);
+	free(homebus_sock_dir);
 }
 
 #include <libubox/ulog.h>
 
 int main(int argc, char **argv)
 {
-	const char *ubus_socket = UBUS_UNIX_SOCKET;
+	const char *homebus_socket = HOMEBUS_UNIX_SOCKET;
 	int ret = 0;
 	int ch;
 
 	signal(SIGPIPE, SIG_IGN);
 	signal(SIGHUP, sighup_handler);
 
-	ulog_open(ULOG_KMSG | ULOG_SYSLOG, LOG_DAEMON, "ubusd");
-	openlog("ubusd", LOG_PID, LOG_DAEMON);
+	ulog_open(ULOG_KMSG | ULOG_SYSLOG, LOG_DAEMON, "homebusd");
+	openlog("homebusd", LOG_PID, LOG_DAEMON);
 	uloop_init();
 
 	while ((ch = getopt(argc, argv, "A:s:")) != -1) {
 		switch (ch) {
 		case 's':
-			ubus_socket = optarg;
+			homebus_socket = optarg;
 			break;
 		case 'A':
-			ubusd_acl_dir = optarg;
+			homebusd_acl_dir = optarg;
 			break;
 		default:
 			return usage(argv[0]);
@@ -289,19 +289,19 @@ int main(int argc, char **argv)
 	}
 
 	mkdir_sockdir();
-	unlink(ubus_socket);
+	unlink(homebus_socket);
 	umask(0111);
-	server_fd.fd = usock(USOCK_UNIX | USOCK_SERVER | USOCK_NONBLOCK, ubus_socket, NULL);
+	server_fd.fd = usock(USOCK_UNIX | USOCK_SERVER | USOCK_NONBLOCK, homebus_socket, NULL);
 	if (server_fd.fd < 0) {
 		perror("usock");
 		ret = -1;
 		goto out;
 	}
 	uloop_fd_add(&server_fd, ULOOP_READ | ULOOP_EDGE_TRIGGER);
-	ubusd_acl_load();
+	homebusd_acl_load();
 
 	uloop_run();
-	unlink(ubus_socket);
+	unlink(homebus_socket);
 
 out:
 	uloop_done();

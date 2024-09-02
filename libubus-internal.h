@@ -11,25 +11,25 @@
  * GNU General Public License for more details.
  */
 
-#ifndef __LIBUBUS_IO_H
-#define __LIBUBUS_IO_H
+#ifndef __LIBHOMEBUS_IO_H
+#define __LIBHOMEBUS_IO_H
 
 extern struct blob_buf b;
-extern const struct ubus_method watch_method;
+extern const struct homebus_method watch_method;
 
-struct blob_attr **ubus_parse_msg(struct blob_attr *msg, size_t len);
-bool ubus_validate_hdr(struct ubus_msghdr *hdr);
-void ubus_handle_data(struct uloop_fd *u, unsigned int events);
-int ubus_send_msg(struct ubus_context *ctx, uint32_t seq,
+struct blob_attr **homebus_parse_msg(struct blob_attr *msg, size_t len);
+bool homebus_validate_hdr(struct homebus_msghdr *hdr);
+void homebus_handle_data(struct uloop_fd *u, unsigned int events);
+int homebus_send_msg(struct homebus_context *ctx, uint32_t seq,
 		  struct blob_attr *msg, int cmd, uint32_t peer, int fd);
-void ubus_process_msg(struct ubus_context *ctx, struct ubus_msghdr_buf *buf, int fd);
-int __hidden ubus_start_request(struct ubus_context *ctx, struct ubus_request *req,
+void homebus_process_msg(struct homebus_context *ctx, struct homebus_msghdr_buf *buf, int fd);
+int __hidden homebus_start_request(struct homebus_context *ctx, struct homebus_request *req,
 				struct blob_attr *msg, int cmd, uint32_t peer);
-int __hidden __ubus_start_request(struct ubus_context *ctx, struct ubus_request *req,
+int __hidden __homebus_start_request(struct homebus_context *ctx, struct homebus_request *req,
 				struct blob_attr *msg, int cmd, uint32_t peer);
-void ubus_process_obj_msg(struct ubus_context *ctx, struct ubus_msghdr_buf *buf, int fd);
-void ubus_process_req_msg(struct ubus_context *ctx, struct ubus_msghdr_buf *buf, int fd);
-void __hidden ubus_poll_data(struct ubus_context *ctx, int timeout);
+void homebus_process_obj_msg(struct homebus_context *ctx, struct homebus_msghdr_buf *buf, int fd);
+void homebus_process_req_msg(struct homebus_context *ctx, struct homebus_msghdr_buf *buf, int fd);
+void __hidden homebus_poll_data(struct homebus_context *ctx, int timeout);
 
 
 #endif

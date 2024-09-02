@@ -14,7 +14,7 @@
 #include <unistd.h>
 
 #include <libubox/blobmsg_json.h>
-#include "libubus.h"
+#include "libhomebus.h"
 
 static struct blob_buf b;
 static int listen_timeout;
@@ -24,17 +24,17 @@ static int verbose = 0;
 static int monitor_dir = -1;
 static uint32_t monitor_mask;
 static const char * const monitor_types[] = {
-	[UBUS_MSG_HELLO] = "hello",
-	[UBUS_MSG_STATUS] = "status",
-	[UBUS_MSG_DATA] = "data",
-	[UBUS_MSG_PING] = "ping",
-	[UBUS_MSG_LOOKUP] = "lookup",
-	[UBUS_MSG_INVOKE] = "invoke",
-	[UBUS_MSG_ADD_OBJECT] = "add_object",
-	[UBUS_MSG_REMOVE_OBJECT] = "remove_object",
-	[UBUS_MSG_SUBSCRIBE] = "subscribe",
-	[UBUS_MSG_UNSUBSCRIBE] = "unsubscribe",
-	[UBUS_MSG_NOTIFY] = "notify",
+	[HOMEBUS_MSG_HELLO] = "hello",
+	[HOMEBUS_MSG_STATUS] = "status",
+	[HOMEBUS_MSG_DATA] = "data",
+	[HOMEBUS_MSG_PING] = "ping",
+	[HOMEBUS_MSG_LOOKUP] = "lookup",
+	[HOMEBUS_MSG_INVOKE] = "invoke",
+	[HOMEBUS_MSG_ADD_OBJECT] = "add_object",
+	[HOMEBUS_MSG_REMOVE_OBJECT] = "remove_object",
+	[HOMEBUS_MSG_SUBSCRIBE] = "subscribe",
+	[HOMEBUS_MSG_UNSUBSCRIBE] = "unsubscribe",
+	[HOMEBUS_MSG_NOTIFY] = "notify",
 };
 
 static const char *format_type(void *priv, struct blob_attr *attr)
@@ -61,7 +61,7 @@ static const char *format_type(void *priv, struct blob_attr *attr)
 	return type;
 }
 
-static void receive_list_result(struct ubus_context *ctx, struct ubus_object_data *obj, void *priv)
+static void receive_list_result(struct homebus_context *ctx, struct homebus_object_data *obj, void *priv)
 {
 	struct blob_attr *cur;
 	char *s;
@@ -84,7 +84,7 @@ static void receive_list_result(struct ubus_context *ctx, struct ubus_object_dat
 	}
 }
 
-static void receive_call_result_data(struct ubus_request *req, int type, struct blob_attr *msg)
+static void receive_call_result_data(struct homebus_request *req, int type, struct blob_attr *msg)
 {
 	char *str;
 	if (!msg)
@@ -105,30 +105,30 @@ static void print_event(const char *type, struct blob_attr *msg)
 	free(str);
 }
 
-static int receive_request(struct ubus_context *ctx, struct ubus_object *obj,
-			    struct ubus_request_data *req,
+static int receive_request(struct homebus_context *ctx, struct homebus_object *obj,
+			    struct homebus_request_data *req,
 			    const char *method, struct blob_attr *msg)
 {
 	print_event(method, msg);
 	return 0;
 }
 
-static void receive_event(struct ubus_context *ctx, struct ubus_event_handler *ev,
+static void receive_event(struct homebus_context *ctx, struct homebus_event_handler *ev,
 			  const char *type, struct blob_attr *msg)
 {
 	print_event(type, msg);
 }
 
-static int ubus_cli_error(char *cmd, int argc, char **argv, int err)
+static int homebus_cli_error(char *cmd, int argc, char **argv, int err)
 {
        int i;
 
        if (!simple_output && !isatty(fileno(stderr))) {
-	       fprintf(stderr, "Command failed: ubus %s ", cmd);
+	       fprintf(stderr, "Command failed: homebus %s ", cmd);
 	       for (i = 0; i < argc; i++) {
 		       fprintf(stderr, "%s ", argv[i]);
 	       }
-	       fprintf(stderr, "(%s)\n", ubus_strerror(err));
+	       fprintf(stderr, "(%s)\n", homebus_strerror(err));
 
 	       return -err;
        }
@@ -136,7 +136,7 @@ static int ubus_cli_error(char *cmd, int argc, char **argv, int err)
        return err;
 }
 
-static int ubus_cli_list(struct ubus_context *ctx, int argc, char **argv)
+static int homebus_cli_list(struct homebus_context *ctx, int argc, char **argv)
 {
 	const char *path = NULL;
 
@@ -146,10 +146,10 @@ static int ubus_cli_list(struct ubus_context *ctx, int argc, char **argv)
 	if (argc == 1)
 		path = argv[0];
 
-	return ubus_lookup(ctx, path, receive_list_result, NULL);
+	return homebus_lookup(ctx, path, receive_list_result, NULL);
 }
 
-static int ubus_cli_call(struct ubus_context *ctx, int argc, char **argv)
+static int homebus_cli_call(struct homebus_context *ctx, int argc, char **argv)
 {
 	uint32_t id;
 	int ret;
@@ -159,16 +159,16 @@ static int ubus_cli_call(struct ubus_context *ctx, int argc, char **argv)
 
 	blob_buf_init(&b, 0);
 	if (argc == 3 && !blobmsg_add_json_from_string(&b, argv[2])) {
-		return ubus_cli_error("call", argc, argv, UBUS_STATUS_PARSE_ERROR);
+		return homebus_cli_error("call", argc, argv, HOMEBUS_STATUS_PARSE_ERROR);
 	}
 
-	ret = ubus_lookup_id(ctx, argv[0], &id);
+	ret = homebus_lookup_id(ctx, argv[0], &id);
 	if (ret)
 		return ret;
 
-	ret = ubus_invoke(ctx, id, argv[1], b.head, receive_call_result_data, NULL, timeout * 1000);
+	ret = homebus_invoke(ctx, id, argv[1], b.head, receive_call_result_data, NULL, timeout * 1000);
 	if (ret)
-		return ubus_cli_error("call", argc, argv, ret);
+		return homebus_cli_error("call", argc, argv, ret);
 
 	return ret;
 }
@@ -178,28 +178,28 @@ struct cli_listen_data {
 	bool timed_out;
 };
 
-static void ubus_cli_listen_timeout(struct uloop_timeout *timeout)
+static void homebus_cli_listen_timeout(struct uloop_timeout *timeout)
 {
 	struct cli_listen_data *data = container_of(timeout, struct cli_listen_data, timeout);
 	data->timed_out = true;
 	uloop_end();
 }
 
-static void do_listen(struct ubus_context *ctx, struct cli_listen_data *data)
+static void do_listen(struct homebus_context *ctx, struct cli_listen_data *data)
 {
 	memset(data, 0, sizeof(*data));
-	data->timeout.cb = ubus_cli_listen_timeout;
+	data->timeout.cb = homebus_cli_listen_timeout;
 	uloop_init();
-	ubus_add_uloop(ctx);
+	homebus_add_uloop(ctx);
 	if (listen_timeout)
 		uloop_timeout_set(&data->timeout, listen_timeout * 1000);
 	uloop_run();
 	uloop_done();
 }
 
-static int ubus_cli_listen(struct ubus_context *ctx, int argc, char **argv)
+static int homebus_cli_listen(struct homebus_context *ctx, int argc, char **argv)
 {
-	struct ubus_event_handler ev = {
+	struct homebus_event_handler ev = {
 		.cb = receive_event,
 	};
 	struct cli_listen_data data;
@@ -214,7 +214,7 @@ static int ubus_cli_listen(struct ubus_context *ctx, int argc, char **argv)
 	}
 
 	do {
-		ret = ubus_register_event_handler(ctx, &ev, event);
+		ret = homebus_register_event_handler(ctx, &ev, event);
 		if (ret)
 			break;
 
@@ -229,7 +229,7 @@ static int ubus_cli_listen(struct ubus_context *ctx, int argc, char **argv)
 	if (ret) {
 		if (!simple_output)
 			fprintf(stderr, "Error while registering for event '%s': %s\n",
-				event, ubus_strerror(ret));
+				event, homebus_strerror(ret));
 		return -1;
 	}
 
@@ -238,9 +238,9 @@ static int ubus_cli_listen(struct ubus_context *ctx, int argc, char **argv)
 	return 0;
 }
 
-static int ubus_cli_subscribe(struct ubus_context *ctx, int argc, char **argv)
+static int homebus_cli_subscribe(struct homebus_context *ctx, int argc, char **argv)
 {
-	struct ubus_subscriber sub = {
+	struct homebus_subscriber sub = {
 		.cb = receive_request,
 	};
 	struct cli_listen_data data;
@@ -255,21 +255,21 @@ static int ubus_cli_subscribe(struct ubus_context *ctx, int argc, char **argv)
 		return -1;
 	}
 
-	ret = ubus_register_subscriber(ctx, &sub);
+	ret = homebus_register_subscriber(ctx, &sub);
 	for (; !ret && argc > 0; argc--, argv++) {
 		uint32_t id;
 
-		ret = ubus_lookup_id(ctx, argv[0], &id);
+		ret = homebus_lookup_id(ctx, argv[0], &id);
 		if (ret)
 			break;
 
-		ret = ubus_subscribe(ctx, &sub, id);
+		ret = homebus_subscribe(ctx, &sub, id);
 	}
 
 	if (ret) {
 		if (!simple_output)
 			fprintf(stderr, "Error while registering for event '%s': %s\n",
-				event, ubus_strerror(ret));
+				event, homebus_strerror(ret));
 		return -1;
 	}
 
@@ -279,7 +279,7 @@ static int ubus_cli_subscribe(struct ubus_context *ctx, int argc, char **argv)
 }
 
 
-static int ubus_cli_send(struct ubus_context *ctx, int argc, char **argv)
+static int homebus_cli_send(struct homebus_context *ctx, int argc, char **argv)
 {
 	if (argc < 1 || argc > 2)
 		return -2;
@@ -287,15 +287,15 @@ static int ubus_cli_send(struct ubus_context *ctx, int argc, char **argv)
 	blob_buf_init(&b, 0);
 
 	if (argc == 2 && !blobmsg_add_json_from_string(&b, argv[1])) {
-		return UBUS_STATUS_PARSE_ERROR;
+		return HOMEBUS_STATUS_PARSE_ERROR;
 	}
 
-	return ubus_send_event(ctx, argv[0], b.head);
+	return homebus_send_event(ctx, argv[0], b.head);
 }
 
 struct cli_wait_data {
 	struct uloop_timeout timeout;
-	struct ubus_event_handler ev;
+	struct homebus_event_handler ev;
 	char **pending;
 	int n_pending;
 };
@@ -321,7 +321,7 @@ static void wait_check_object(struct cli_wait_data *data, const char *path)
 		uloop_end();
 }
 
-static void wait_event_cb(struct ubus_context *ctx, struct ubus_event_handler *ev,
+static void wait_event_cb(struct homebus_context *ctx, struct homebus_event_handler *ev,
 			  const char *type, struct blob_attr *msg)
 {
 	static const struct blobmsg_policy policy = {
@@ -331,7 +331,7 @@ static void wait_event_cb(struct ubus_context *ctx, struct ubus_event_handler *e
 	struct blob_attr *attr;
 	const char *path;
 
-	if (strcmp(type, "ubus.object.add") != 0)
+	if (strcmp(type, "homebus.object.add") != 0)
 		return;
 
 	blobmsg_parse(&policy, 1, &attr, blob_data(msg), blob_len(msg));
@@ -342,7 +342,7 @@ static void wait_event_cb(struct ubus_context *ctx, struct ubus_event_handler *e
 	wait_check_object(data, path);
 }
 
-static void wait_list_cb(struct ubus_context *ctx, struct ubus_object_data *obj, void *priv)
+static void wait_list_cb(struct homebus_context *ctx, struct homebus_object_data *obj, void *priv)
 {
 	struct cli_wait_data *data = priv;
 
@@ -355,7 +355,7 @@ static void wait_timeout(struct uloop_timeout *timeout)
 	uloop_end();
 }
 
-static int ubus_cli_wait_for(struct ubus_context *ctx, int argc, char **argv)
+static int homebus_cli_wait_for(struct homebus_context *ctx, int argc, char **argv)
 {
 	struct cli_wait_data data = {
 		.timeout.cb = wait_timeout,
@@ -369,16 +369,16 @@ static int ubus_cli_wait_for(struct ubus_context *ctx, int argc, char **argv)
 		return -2;
 
 	uloop_init();
-	ubus_add_uloop(ctx);
+	homebus_add_uloop(ctx);
 
-	ret = ubus_register_event_handler(ctx, &data.ev, "ubus.object.add");
+	ret = homebus_register_event_handler(ctx, &data.ev, "homebus.object.add");
 	if (ret)
 		return ret;
 
 	if (!data.n_pending)
 		return ret;
 
-	ret = ubus_lookup(ctx, NULL, wait_list_cb, &data);
+	ret = homebus_lookup(ctx, NULL, wait_list_cb, &data);
 	if (ret)
 		return ret;
 
@@ -390,13 +390,13 @@ static int ubus_cli_wait_for(struct ubus_context *ctx, int argc, char **argv)
 	uloop_done();
 
 	if (data.n_pending)
-		return UBUS_STATUS_TIMEOUT;
+		return HOMEBUS_STATUS_TIMEOUT;
 
 	return ret;
 }
 
 static const char *
-ubus_cli_msg_type(uint32_t type)
+homebus_cli_msg_type(uint32_t type)
 {
 	const char *ret = NULL;
 	static char unk_type[16];
@@ -414,41 +414,41 @@ ubus_cli_msg_type(uint32_t type)
 }
 
 static char *
-ubus_cli_get_monitor_data(struct blob_attr *data)
+homebus_cli_get_monitor_data(struct blob_attr *data)
 {
-	static const struct blob_attr_info policy[UBUS_ATTR_MAX] = {
-		[UBUS_ATTR_STATUS] = { .type = BLOB_ATTR_INT32 },
-		[UBUS_ATTR_OBJPATH] = { .type = BLOB_ATTR_STRING },
-		[UBUS_ATTR_OBJID] = { .type = BLOB_ATTR_INT32 },
-		[UBUS_ATTR_METHOD] = { .type = BLOB_ATTR_STRING },
-		[UBUS_ATTR_OBJTYPE] = { .type = BLOB_ATTR_INT32 },
-		[UBUS_ATTR_SIGNATURE] = { .type = BLOB_ATTR_NESTED },
-		[UBUS_ATTR_DATA] = { .type = BLOB_ATTR_NESTED },
-		[UBUS_ATTR_ACTIVE] = { .type = BLOB_ATTR_INT8 },
-		[UBUS_ATTR_NO_REPLY] = { .type = BLOB_ATTR_INT8 },
-		[UBUS_ATTR_USER] = { .type = BLOB_ATTR_STRING },
-		[UBUS_ATTR_GROUP] = { .type = BLOB_ATTR_STRING },
+	static const struct blob_attr_info policy[HOMEBUS_ATTR_MAX] = {
+		[HOMEBUS_ATTR_STATUS] = { .type = BLOB_ATTR_INT32 },
+		[HOMEBUS_ATTR_OBJPATH] = { .type = BLOB_ATTR_STRING },
+		[HOMEBUS_ATTR_OBJID] = { .type = BLOB_ATTR_INT32 },
+		[HOMEBUS_ATTR_METHOD] = { .type = BLOB_ATTR_STRING },
+		[HOMEBUS_ATTR_OBJTYPE] = { .type = BLOB_ATTR_INT32 },
+		[HOMEBUS_ATTR_SIGNATURE] = { .type = BLOB_ATTR_NESTED },
+		[HOMEBUS_ATTR_DATA] = { .type = BLOB_ATTR_NESTED },
+		[HOMEBUS_ATTR_ACTIVE] = { .type = BLOB_ATTR_INT8 },
+		[HOMEBUS_ATTR_NO_REPLY] = { .type = BLOB_ATTR_INT8 },
+		[HOMEBUS_ATTR_USER] = { .type = BLOB_ATTR_STRING },
+		[HOMEBUS_ATTR_GROUP] = { .type = BLOB_ATTR_STRING },
 	};
-	static const char * const names[UBUS_ATTR_MAX] = {
-		[UBUS_ATTR_STATUS] = "status",
-		[UBUS_ATTR_OBJPATH] = "objpath",
-		[UBUS_ATTR_OBJID] = "objid",
-		[UBUS_ATTR_METHOD] = "method",
-		[UBUS_ATTR_OBJTYPE] = "objtype",
-		[UBUS_ATTR_SIGNATURE] = "signature",
-		[UBUS_ATTR_DATA] = "data",
-		[UBUS_ATTR_ACTIVE] = "active",
-		[UBUS_ATTR_NO_REPLY] = "no_reply",
-		[UBUS_ATTR_USER] = "user",
-		[UBUS_ATTR_GROUP] = "group",
+	static const char * const names[HOMEBUS_ATTR_MAX] = {
+		[HOMEBUS_ATTR_STATUS] = "status",
+		[HOMEBUS_ATTR_OBJPATH] = "objpath",
+		[HOMEBUS_ATTR_OBJID] = "objid",
+		[HOMEBUS_ATTR_METHOD] = "method",
+		[HOMEBUS_ATTR_OBJTYPE] = "objtype",
+		[HOMEBUS_ATTR_SIGNATURE] = "signature",
+		[HOMEBUS_ATTR_DATA] = "data",
+		[HOMEBUS_ATTR_ACTIVE] = "active",
+		[HOMEBUS_ATTR_NO_REPLY] = "no_reply",
+		[HOMEBUS_ATTR_USER] = "user",
+		[HOMEBUS_ATTR_GROUP] = "group",
 	};
-	struct blob_attr *tb[UBUS_ATTR_MAX];
+	struct blob_attr *tb[HOMEBUS_ATTR_MAX];
 	int i;
 
 	blob_buf_init(&b, 0);
-	blob_parse(data, tb, policy, UBUS_ATTR_MAX);
+	blob_parse(data, tb, policy, HOMEBUS_ATTR_MAX);
 
-	for (i = 0; i < UBUS_ATTR_MAX; i++) {
+	for (i = 0; i < HOMEBUS_ATTR_MAX; i++) {
 		const char *n = names[i];
 		struct blob_attr *v = tb[i];
 
@@ -475,35 +475,35 @@ ubus_cli_get_monitor_data(struct blob_attr *data)
 }
 
 static void
-ubus_cli_monitor_cb(struct ubus_context *ctx, uint32_t seq, struct blob_attr *msg)
+homebus_cli_monitor_cb(struct homebus_context *ctx, uint32_t seq, struct blob_attr *msg)
 {
-	static const struct blob_attr_info policy[UBUS_MONITOR_MAX] = {
-		[UBUS_MONITOR_CLIENT] = { .type = BLOB_ATTR_INT32 },
-		[UBUS_MONITOR_PEER] = { .type = BLOB_ATTR_INT32 },
-		[UBUS_MONITOR_SEND] = { .type = BLOB_ATTR_INT8 },
-		[UBUS_MONITOR_TYPE] = { .type = BLOB_ATTR_INT32 },
-		[UBUS_MONITOR_DATA] = { .type = BLOB_ATTR_NESTED },
+	static const struct blob_attr_info policy[HOMEBUS_MONITOR_MAX] = {
+		[HOMEBUS_MONITOR_CLIENT] = { .type = BLOB_ATTR_INT32 },
+		[HOMEBUS_MONITOR_PEER] = { .type = BLOB_ATTR_INT32 },
+		[HOMEBUS_MONITOR_SEND] = { .type = BLOB_ATTR_INT8 },
+		[HOMEBUS_MONITOR_TYPE] = { .type = BLOB_ATTR_INT32 },
+		[HOMEBUS_MONITOR_DATA] = { .type = BLOB_ATTR_NESTED },
 	};
-	struct blob_attr *tb[UBUS_MONITOR_MAX];
+	struct blob_attr *tb[HOMEBUS_MONITOR_MAX];
 	uint32_t client, peer, type;
 	bool send;
 	char *data;
 
-	blob_parse_untrusted(msg, blob_raw_len(msg), tb, policy, UBUS_MONITOR_MAX);
+	blob_parse_untrusted(msg, blob_raw_len(msg), tb, policy, HOMEBUS_MONITOR_MAX);
 
-	if (!tb[UBUS_MONITOR_CLIENT] ||
-	    !tb[UBUS_MONITOR_PEER] ||
-	    !tb[UBUS_MONITOR_SEND] ||
-	    !tb[UBUS_MONITOR_TYPE] ||
-	    !tb[UBUS_MONITOR_DATA]) {
+	if (!tb[HOMEBUS_MONITOR_CLIENT] ||
+	    !tb[HOMEBUS_MONITOR_PEER] ||
+	    !tb[HOMEBUS_MONITOR_SEND] ||
+	    !tb[HOMEBUS_MONITOR_TYPE] ||
+	    !tb[HOMEBUS_MONITOR_DATA]) {
 		printf("Invalid monitor msg\n");
 		return;
 	}
 
-	send = blob_get_int32(tb[UBUS_MONITOR_SEND]);
-	client = blob_get_int32(tb[UBUS_MONITOR_CLIENT]);
-	peer = blob_get_int32(tb[UBUS_MONITOR_PEER]);
-	type = blob_get_int32(tb[UBUS_MONITOR_TYPE]);
+	send = blob_get_int32(tb[HOMEBUS_MONITOR_SEND]);
+	client = blob_get_int32(tb[HOMEBUS_MONITOR_CLIENT]);
+	peer = blob_get_int32(tb[HOMEBUS_MONITOR_PEER]);
+	type = blob_get_int32(tb[HOMEBUS_MONITOR_TYPE]);
 
 	if (monitor_mask && type < 32 && !(monitor_mask & (1 << type)))
 		return;
@@ -511,27 +511,27 @@ ubus_cli_monitor_cb(struct ubus_context *ctx, uint32_t seq, struct blob_attr *ms
 	if (monitor_dir >= 0 && send != monitor_dir)
 		return;
 
-	data = ubus_cli_get_monitor_data(tb[UBUS_MONITOR_DATA]);
-	printf("%s %08x #%08x %14s: %s\n", send ? "->" : "<-", client, peer, ubus_cli_msg_type(type), data);
+	data = homebus_cli_get_monitor_data(tb[HOMEBUS_MONITOR_DATA]);
+	printf("%s %08x #%08x %14s: %s\n", send ? "->" : "<-", client, peer, homebus_cli_msg_type(type), data);
 	free(data);
 	fflush(stdout);
 }
 
-static int ubus_cli_monitor(struct ubus_context *ctx, int argc, char **argv)
+static int homebus_cli_monitor(struct homebus_context *ctx, int argc, char **argv)
 {
 	int ret;
 
 	uloop_init();
-	ubus_add_uloop(ctx);
-	ctx->monitor_cb = ubus_cli_monitor_cb;
-	ret = ubus_monitor_start(ctx);
+	homebus_add_uloop(ctx);
+	ctx->monitor_cb = homebus_cli_monitor_cb;
+	ret = homebus_monitor_start(ctx);
 	if (ret)
 		return ret;
 
 	uloop_run();
 	uloop_done();
 
-	ubus_monitor_stop(ctx);
+	homebus_monitor_stop(ctx);
 	return 0;
 }
 
@@ -569,8 +569,8 @@ static int usage(const char *prog)
 		" - subscribe <path> [<path>...]	Subscribe to object(s) notifications\n"
 		" - listen [<path>...]			Listen for events\n"
 		" - send <type> [<message>]		Send an event\n"
-		" - wait_for <object> [<object>...]	Wait for multiple objects to appear on ubus\n"
-		" - monitor				Monitor ubus traffic\n"
+		" - wait_for <object> [<object>...]	Wait for multiple objects to appear on homebus\n"
+		" - monitor				Monitor homebus traffic\n"
 		"\n", prog);
 	return 1;
 }
@@ -578,21 +578,21 @@ static int usage(const char *prog)
 
 static struct {
 	const char *name;
-	int (*cb)(struct ubus_context *ctx, int argc, char **argv);
+	int (*cb)(struct homebus_context *ctx, int argc, char **argv);
 } commands[] = {
-	{ "list", ubus_cli_list },
-	{ "call", ubus_cli_call },
-	{ "listen", ubus_cli_listen },
-	{ "subscribe", ubus_cli_subscribe },
-	{ "send", ubus_cli_send },
-	{ "wait_for", ubus_cli_wait_for },
-	{ "monitor", ubus_cli_monitor },
+	{ "list", homebus_cli_list },
+	{ "call", homebus_cli_call },
+	{ "listen", homebus_cli_listen },
+	{ "subscribe", homebus_cli_subscribe },
+	{ "send", homebus_cli_send },
+	{ "wait_for", homebus_cli_wait_for },
+	{ "monitor", homebus_cli_monitor },
 };
 
 int main(int argc, char **argv)
 {
-	const char *progname, *ubus_socket = NULL;
-	struct ubus_context *ctx;
+	const char *progname, *homebus_socket = NULL;
+	struct homebus_context *ctx;
 	int ret = 0;
 	char *cmd;
 	size_t i;
@@ -603,7 +603,7 @@ int main(int argc, char **argv)
 	while ((ch = getopt(argc, argv, "m:M:vs:t:S")) != -1) {
 		switch (ch) {
 		case 's':
-			ubus_socket = optarg;
+			homebus_socket = optarg;
 			break;
 		case 't':
 			listen_timeout = atoi(optarg);
@@ -643,10 +643,10 @@ int main(int argc, char **argv)
 	if (argc < 1)
 		return usage(progname);
 
-	ctx = ubus_connect(ubus_socket);
+	ctx = homebus_connect(homebus_socket);
 	if (!ctx) {
 		if (!simple_output)
-			fprintf(stderr, "Failed to connect to ubus\n");
+			fprintf(stderr, "Failed to connect to homebus\n");
 		return -1;
 	}
 
@@ -663,10 +663,10 @@ int main(int argc, char **argv)
 	}
 
 	if (ret > 0 && !simple_output)
-		fprintf(stderr, "Command failed: %s\n", ubus_strerror(ret));
+		fprintf(stderr, "Command failed: %s\n", homebus_strerror(ret));
 	else if (ret == -2)
 		usage(progname);
 
-	ubus_free(ctx);
+	homebus_free(ctx);
 	return ret;
 }

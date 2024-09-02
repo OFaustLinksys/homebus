@@ -11,20 +11,20 @@
  * GNU General Public License for more details.
  */
 
-#ifndef __UBUSD_ACL_H
-#define __UBUSD_ACL_H
+#ifndef __HOMEBUSD_ACL_H
+#define __HOMEBUSD_ACL_H
 
-enum ubusd_acl_type {
-	UBUS_ACL_PUBLISH,
-	UBUS_ACL_SUBSCRIBE,
-	UBUS_ACL_ACCESS,
-	UBUS_ACL_LISTEN,
-	UBUS_ACL_SEND,
+enum homebusd_acl_type {
+	HOMEBUS_ACL_PUBLISH,
+	HOMEBUS_ACL_SUBSCRIBE,
+	HOMEBUS_ACL_ACCESS,
+	HOMEBUS_ACL_LISTEN,
+	HOMEBUS_ACL_SEND,
 };
 
-int ubusd_acl_check(struct ubus_client *cl, const char *obj, const char *method, enum ubusd_acl_type type);
-int ubusd_acl_init_client(struct ubus_client *cl, int fd);
-void ubusd_acl_free_client(struct ubus_client *cl);
-void ubusd_acl_load(void);
+int homebusd_acl_check(struct homebus_client *cl, const char *obj, const char *method, enum homebusd_acl_type type);
+int homebusd_acl_init_client(struct homebus_client *cl, int fd);
+void homebusd_acl_free_client(struct homebus_client *cl);
+void homebusd_acl_load(void);
 
 #endif

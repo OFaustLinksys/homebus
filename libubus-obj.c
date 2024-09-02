@@ -12,37 +12,37 @@
  */
 
 #include <unistd.h>
-#include "libubus.h"
-#include "libubus-internal.h"
+#include "libhomebus.h"
+#include "libhomebus-internal.h"
 
 static void
-ubus_process_unsubscribe(struct ubus_context *ctx, struct ubus_msghdr *hdr,
-			 struct ubus_object *obj, struct blob_attr **attrbuf, int fd)
+homebus_process_unsubscribe(struct homebus_context *ctx, struct homebus_msghdr *hdr,
+			 struct homebus_object *obj, struct blob_attr **attrbuf, int fd)
 {
-	struct ubus_subscriber *s;
+	struct homebus_subscriber *s;
 
-	if (!obj || !attrbuf[UBUS_ATTR_TARGET])
+	if (!obj || !attrbuf[HOMEBUS_ATTR_TARGET])
 		return;
 
 	if (obj->methods != &watch_method)
 		return;
 
-	s = container_of(obj, struct ubus_subscriber, obj);
+	s = container_of(obj, struct homebus_subscriber, obj);
 	if (s->remove_cb)
-		s->remove_cb(ctx, s, blob_get_u32(attrbuf[UBUS_ATTR_TARGET]));
+		s->remove_cb(ctx, s, blob_get_u32(attrbuf[HOMEBUS_ATTR_TARGET]));
 
 	if (fd >= 0)
 		close(fd);
 }
 
 static void
-ubus_process_notify(struct ubus_context *ctx, struct ubus_msghdr *hdr,
-		    struct ubus_object *obj, struct blob_attr **attrbuf, int fd)
+homebus_process_notify(struct homebus_context *ctx, struct homebus_msghdr *hdr,
+		    struct homebus_object *obj, struct blob_attr **attrbuf, int fd)
 {
-	if (!obj || !attrbuf[UBUS_ATTR_ACTIVE])
+	if (!obj || !attrbuf[HOMEBUS_ATTR_ACTIVE])
 		return;
 
-	obj->has_subscribers = blob_get_u8(attrbuf[UBUS_ATTR_ACTIVE]);
+	obj->has_subscribers = blob_get_u8(attrbuf[HOMEBUS_ATTR_ACTIVE]);
 	if (obj->subscribe_cb)
 		obj->subscribe_cb(ctx, obj);
 
@@ -50,10 +50,10 @@ ubus_process_notify(struct ubus_context *ctx, struct ubus_msghdr *hdr,
 		close(fd);
 }
 static void
-ubus_process_invoke(struct ubus_context *ctx, struct ubus_msghdr *hdr,
-		    struct ubus_object *obj, struct blob_attr **attrbuf, int fd)
+homebus_process_invoke(struct homebus_context *ctx, struct homebus_msghdr *hdr,
+		    struct homebus_object *obj, struct blob_attr **attrbuf, int fd)
 {
-	struct ubus_request_data req = {
+	struct homebus_request_data req = {
 		.fd = -1,
 		.req_fd = fd,
 	};
@@ -63,80 +63,80 @@ ubus_process_invoke(struct ubus_context *ctx, struct ubus_msghdr *hdr,
 	bool no_reply = false;
 
 	if (!obj) {
-		ret = UBUS_STATUS_NOT_FOUND;
+		ret = HOMEBUS_STATUS_NOT_FOUND;
 		goto send;
 	}
 
-	if (!attrbuf[UBUS_ATTR_METHOD]) {
-		ret = UBUS_STATUS_INVALID_ARGUMENT;
+	if (!attrbuf[HOMEBUS_ATTR_METHOD]) {
+		ret = HOMEBUS_STATUS_INVALID_ARGUMENT;
 		goto send;
 	}
 
-	if (attrbuf[UBUS_ATTR_NO_REPLY])
-		no_reply = blob_get_int8(attrbuf[UBUS_ATTR_NO_REPLY]);
+	if (attrbuf[HOMEBUS_ATTR_NO_REPLY])
+		no_reply = blob_get_int8(attrbuf[HOMEBUS_ATTR_NO_REPLY]);
 
 	req.peer = hdr->peer;
 	req.seq = hdr->seq;
 	req.object = obj->id;
-	if (attrbuf[UBUS_ATTR_USER] && attrbuf[UBUS_ATTR_GROUP]) {
-		req.acl.user = blobmsg_get_string(attrbuf[UBUS_ATTR_USER]);
-		req.acl.group = blobmsg_get_string(attrbuf[UBUS_ATTR_GROUP]);
+	if (attrbuf[HOMEBUS_ATTR_USER] && attrbuf[HOMEBUS_ATTR_GROUP]) {
+		req.acl.user = blobmsg_get_string(attrbuf[HOMEBUS_ATTR_USER]);
+		req.acl.group = blobmsg_get_string(attrbuf[HOMEBUS_ATTR_GROUP]);
 		req.acl.object = obj->name;
 	}
 	for (method = 0; method < obj->n_methods; method++)
 		if (!obj->methods[method].name ||
 		    !strcmp(obj->methods[method].name,
-		            blob_data(attrbuf[UBUS_ATTR_METHOD])))
+		            blob_data(attrbuf[HOMEBUS_ATTR_METHOD])))
 			goto found;
 
 	/* not found */
-	ret = UBUS_STATUS_METHOD_NOT_FOUND;
+	ret = HOMEBUS_STATUS_METHOD_NOT_FOUND;
 	goto send;
 
 found:
-	if (!attrbuf[UBUS_ATTR_DATA]) {
-		ret = UBUS_STATUS_INVALID_ARGUMENT;
+	if (!attrbuf[HOMEBUS_ATTR_DATA]) {
+		ret = HOMEBUS_STATUS_INVALID_ARGUMENT;
 		goto send;
 	}
 
 	ret = obj->methods[method].handler(ctx, obj, &req,
-					   blob_data(attrbuf[UBUS_ATTR_METHOD]),
-					   attrbuf[UBUS_ATTR_DATA]);
+					   blob_data(attrbuf[HOMEBUS_ATTR_METHOD]),
+					   attrbuf[HOMEBUS_ATTR_DATA]);
 	if (req.req_fd >= 0)
 		close(req.req_fd);
 	if (req.deferred || no_reply)
 		return;
 
 send:
-	ubus_complete_deferred_request(ctx, &req, ret);
+	homebus_complete_deferred_request(ctx, &req, ret);
 }
 
 
-void __hidden ubus_process_obj_msg(struct ubus_context *ctx, struct ubus_msghdr_buf *buf, int fd)
+void __hidden homebus_process_obj_msg(struct homebus_context *ctx, struct homebus_msghdr_buf *buf, int fd)
 {
-	void (*cb)(struct ubus_context *, struct ubus_msghdr *,
-		   struct ubus_object *, struct blob_attr **, int fd);
-	struct ubus_msghdr *hdr = &buf->hdr;
+	void (*cb)(struct homebus_context *, struct homebus_msghdr *,
+		   struct homebus_object *, struct blob_attr **, int fd);
+	struct homebus_msghdr *hdr = &buf->hdr;
 	struct blob_attr **attrbuf;
-	struct ubus_object *obj;
+	struct homebus_object *obj;
 	uint32_t objid;
 	void *prev_data = NULL;
-	attrbuf = ubus_parse_msg(buf->data, blob_raw_len(buf->data));
-	if (!attrbuf[UBUS_ATTR_OBJID])
+	attrbuf = homebus_parse_msg(buf->data, blob_raw_len(buf->data));
+	if (!attrbuf[HOMEBUS_ATTR_OBJID])
 		return;
 
-	objid = blob_get_u32(attrbuf[UBUS_ATTR_OBJID]);
+	objid = blob_get_u32(attrbuf[HOMEBUS_ATTR_OBJID]);
 	obj = avl_find_element(&ctx->objects, &objid, obj, avl);
 
 	switch (hdr->type) {
-	case UBUS_MSG_INVOKE:
-		cb = ubus_process_invoke;
+	case HOMEBUS_MSG_INVOKE:
+		cb = homebus_process_invoke;
 		break;
-	case UBUS_MSG_UNSUBSCRIBE:
-		cb = ubus_process_unsubscribe;
+	case HOMEBUS_MSG_UNSUBSCRIBE:
+		cb = homebus_process_unsubscribe;
 		break;
-	case UBUS_MSG_NOTIFY:
-		cb = ubus_process_notify;
+	case HOMEBUS_MSG_NOTIFY:
+		cb = homebus_process_notify;
 		break;
 	default:
 		return;
@@ -157,24 +157,24 @@ void __hidden ubus_process_obj_msg(struct ubus_context *ctx, struct ubus_msghdr_
 	}
 }
 
-static void ubus_add_object_cb(struct ubus_request *req, int type, struct blob_attr *msg)
+static void homebus_add_object_cb(struct homebus_request *req, int type, struct blob_attr *msg)
 {
-	struct ubus_object *obj = req->priv;
-	struct blob_attr **attrbuf = ubus_parse_msg(msg, blob_raw_len(msg));
+	struct homebus_object *obj = req->priv;
+	struct blob_attr **attrbuf = homebus_parse_msg(msg, blob_raw_len(msg));
 
-	if (!attrbuf[UBUS_ATTR_OBJID])
+	if (!attrbuf[HOMEBUS_ATTR_OBJID])
 		return;
 
-	obj->id = blob_get_u32(attrbuf[UBUS_ATTR_OBJID]);
+	obj->id = blob_get_u32(attrbuf[HOMEBUS_ATTR_OBJID]);
 
-	if (attrbuf[UBUS_ATTR_OBJTYPE])
-		obj->type->id = blob_get_u32(attrbuf[UBUS_ATTR_OBJTYPE]);
+	if (attrbuf[HOMEBUS_ATTR_OBJTYPE])
+		obj->type->id = blob_get_u32(attrbuf[HOMEBUS_ATTR_OBJTYPE]);
 
 	obj->avl.key = &obj->id;
 	avl_insert(&req->ctx->objects, &obj->avl);
 }
 
-static void ubus_push_method_data(const struct ubus_method *m)
+static void homebus_push_method_data(const struct homebus_method *m)
 {
 	void *mtbl;
 	int i;
@@ -191,87 +191,87 @@ static void ubus_push_method_data(const struct ubus_method *m)
 	blobmsg_close_table(&b, mtbl);
 }
 
-static bool ubus_push_object_type(const struct ubus_object_type *type)
+static bool homebus_push_object_type(const struct homebus_object_type *type)
 {
 	void *s;
 	int i;
 
-	s = blob_nest_start(&b, UBUS_ATTR_SIGNATURE);
+	s = blob_nest_start(&b, HOMEBUS_ATTR_SIGNATURE);
 
 	for (i = 0; i < type->n_methods; i++)
-		ubus_push_method_data(&type->methods[i]);
+		homebus_push_method_data(&type->methods[i]);
 
 	blob_nest_end(&b, s);
 
 	return true;
 }
 
-int ubus_add_object(struct ubus_context *ctx, struct ubus_object *obj)
+int homebus_add_object(struct homebus_context *ctx, struct homebus_object *obj)
 {
-	struct ubus_request req;
+	struct homebus_request req;
 	int ret;
 
 	blob_buf_init(&b, 0);
 
 	if (obj->name && obj->type) {
-		blob_put_string(&b, UBUS_ATTR_OBJPATH, obj->name);
+		blob_put_string(&b, HOMEBUS_ATTR_OBJPATH, obj->name);
 
 		if (obj->type->id)
-			blob_put_int32(&b, UBUS_ATTR_OBJTYPE, obj->type->id);
-		else if (!ubus_push_object_type(obj->type))
-			return UBUS_STATUS_INVALID_ARGUMENT;
+			blob_put_int32(&b, HOMEBUS_ATTR_OBJTYPE, obj->type->id);
+		else if (!homebus_push_object_type(obj->type))
+			return HOMEBUS_STATUS_INVALID_ARGUMENT;
 	}
 
-	if (ubus_start_request(ctx, &req, b.head, UBUS_MSG_ADD_OBJECT, 0) < 0)
-		return UBUS_STATUS_INVALID_ARGUMENT;
+	if (homebus_start_request(ctx, &req, b.head, HOMEBUS_MSG_ADD_OBJECT, 0) < 0)
+		return HOMEBUS_STATUS_INVALID_ARGUMENT;
 
-	req.raw_data_cb = ubus_add_object_cb;
+	req.raw_data_cb = homebus_add_object_cb;
 	req.priv = obj;
-	ret = ubus_complete_request(ctx, &req, 0);
+	ret = homebus_complete_request(ctx, &req, 0);
 	if (ret)
 		return ret;
 
 	if (!obj->id)
-		return UBUS_STATUS_NO_DATA;
+		return HOMEBUS_STATUS_NO_DATA;
 
 	return 0;
 }
 
-static void ubus_remove_object_cb(struct ubus_request *req, int type, struct blob_attr *msg)
+static void homebus_remove_object_cb(struct homebus_request *req, int type, struct blob_attr *msg)
 {
-	struct ubus_object *obj = req->priv;
-	struct blob_attr **attrbuf = ubus_parse_msg(msg, blob_raw_len(msg));
+	struct homebus_object *obj = req->priv;
+	struct blob_attr **attrbuf = homebus_parse_msg(msg, blob_raw_len(msg));
 
-	if (!attrbuf[UBUS_ATTR_OBJID])
+	if (!attrbuf[HOMEBUS_ATTR_OBJID])
 		return;
 
 	avl_delete(&req->ctx->objects, &obj->avl);
 
 	obj->id = 0;
 
-	if (attrbuf[UBUS_ATTR_OBJTYPE] && obj->type)
+	if (attrbuf[HOMEBUS_ATTR_OBJTYPE] && obj->type)
 		obj->type->id = 0;
 }
 
-int ubus_remove_object(struct ubus_context *ctx, struct ubus_object *obj)
+int homebus_remove_object(struct homebus_context *ctx, struct homebus_object *obj)
 {
-	struct ubus_request req;
+	struct homebus_request req;
 	int ret;
 
 	blob_buf_init(&b, 0);
-	blob_put_int32(&b, UBUS_ATTR_OBJID, obj->id);
+	blob_put_int32(&b, HOMEBUS_ATTR_OBJID, obj->id);
 
-	if (ubus_start_request(ctx, &req, b.head, UBUS_MSG_REMOVE_OBJECT, 0) < 0)
-		return UBUS_STATUS_INVALID_ARGUMENT;
+	if (homebus_start_request(ctx, &req, b.head, HOMEBUS_MSG_REMOVE_OBJECT, 0) < 0)
+		return HOMEBUS_STATUS_INVALID_ARGUMENT;
 
-	req.raw_data_cb = ubus_remove_object_cb;
+	req.raw_data_cb = homebus_remove_object_cb;
 	req.priv = obj;
-	ret = ubus_complete_request(ctx, &req, 0);
+	ret = homebus_complete_request(ctx, &req, 0);
 	if (ret)
 		return ret;
 
 	if (obj->id)
-		return UBUS_STATUS_NO_DATA;
+		return HOMEBUS_STATUS_NO_DATA;
 
 	return 0;
 }

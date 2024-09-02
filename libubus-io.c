@@ -24,28 +24,28 @@
 #include <libubox/blob.h>
 #include <libubox/blobmsg.h>
 
-#include "libubus.h"
-#include "libubus-internal.h"
+#include "libhomebus.h"
+#include "libhomebus-internal.h"
 
 #define STATIC_IOV(_var) { .iov_base = (char *) &(_var), .iov_len = sizeof(_var) }
 
-#define UBUS_MSGBUF_REDUCTION_INTERVAL	16
+#define HOMEBUS_MSGBUF_REDUCTION_INTERVAL	16
 
-static const struct blob_attr_info ubus_policy[UBUS_ATTR_MAX] = {
-	[UBUS_ATTR_STATUS] = { .type = BLOB_ATTR_INT32 },
-	[UBUS_ATTR_OBJID] = { .type = BLOB_ATTR_INT32 },
-	[UBUS_ATTR_OBJPATH] = { .type = BLOB_ATTR_STRING },
-	[UBUS_ATTR_METHOD] = { .type = BLOB_ATTR_STRING },
-	[UBUS_ATTR_ACTIVE] = { .type = BLOB_ATTR_INT8 },
-	[UBUS_ATTR_NO_REPLY] = { .type = BLOB_ATTR_INT8 },
-	[UBUS_ATTR_SUBSCRIBERS] = { .type = BLOB_ATTR_NESTED },
+static const struct blob_attr_info homebus_policy[HOMEBUS_ATTR_MAX] = {
+	[HOMEBUS_ATTR_STATUS] = { .type = BLOB_ATTR_INT32 },
+	[HOMEBUS_ATTR_OBJID] = { .type = BLOB_ATTR_INT32 },
+	[HOMEBUS_ATTR_OBJPATH] = { .type = BLOB_ATTR_STRING },
+	[HOMEBUS_ATTR_METHOD] = { .type = BLOB_ATTR_STRING },
+	[HOMEBUS_ATTR_ACTIVE] = { .type = BLOB_ATTR_INT8 },
+	[HOMEBUS_ATTR_NO_REPLY] = { .type = BLOB_ATTR_INT8 },
+	[HOMEBUS_ATTR_SUBSCRIBERS] = { .type = BLOB_ATTR_NESTED },
 };
 
-static struct blob_attr *attrbuf[UBUS_ATTR_MAX];
+static struct blob_attr *attrbuf[HOMEBUS_ATTR_MAX];
 
-__hidden struct blob_attr **ubus_parse_msg(struct blob_attr *msg, size_t len)
+__hidden struct blob_attr **homebus_parse_msg(struct blob_attr *msg, size_t len)
 {
-	blob_parse_untrusted(msg, len, attrbuf, ubus_policy, UBUS_ATTR_MAX);
+	blob_parse_untrusted(msg, len, attrbuf, homebus_policy, HOMEBUS_ATTR_MAX);
 	return attrbuf;
 }
 
@@ -123,10 +123,10 @@ static int writev_retry(int fd, struct iovec *iov, int iov_len, int sock_fd)
 	return -1;
 }
 
-int __hidden ubus_send_msg(struct ubus_context *ctx, uint32_t seq,
+int __hidden homebus_send_msg(struct homebus_context *ctx, uint32_t seq,
 			   struct blob_attr *msg, int cmd, uint32_t peer, int fd)
 {
-	struct ubus_msghdr hdr;
+	struct homebus_msghdr hdr;
 	struct iovec iov[2] = {
 		STATIC_IOV(hdr)
 	};
@@ -155,7 +155,7 @@ int __hidden ubus_send_msg(struct ubus_context *ctx, uint32_t seq,
 	return ret;
 }
 
-static int recv_retry(struct ubus_context *ctx, struct iovec *iov, bool wait, int *recv_fd)
+static int recv_retry(struct homebus_context *ctx, struct iovec *iov, bool wait, int *recv_fd)
 {
 	uint8_t fd_buf[CMSG_SPACE(sizeof(int))] = { 0 };
 	struct msghdr msghdr = { 0 };
@@ -221,7 +221,7 @@ static int recv_retry(struct ubus_context *ctx, struct iovec *iov, bool wait, in
 	return total;
 }
 
-bool ubus_validate_hdr(struct ubus_msghdr *hdr)
+bool homebus_validate_hdr(struct homebus_msghdr *hdr)
 {
 	struct blob_attr *data = (struct blob_attr *) (hdr + 1);
 
@@ -231,13 +231,13 @@ bool ubus_validate_hdr(struct ubus_msghdr *hdr)
 	if (blob_raw_len(data) < sizeof(*data))
 		return false;
 
-	if (blob_pad_len(data) > UBUS_MAX_MSGLEN)
+	if (blob_pad_len(data) > HOMEBUS_MAX_MSGLEN)
 		return false;
 
 	return true;
 }
 
-static bool alloc_msg_buf(struct ubus_context *ctx, int len)
+static bool alloc_msg_buf(struct homebus_context *ctx, int len)
 {
 	void *ptr;
 	int buf_len = ctx->msgbuf_data_len;
@@ -246,12 +246,12 @@ static bool alloc_msg_buf(struct ubus_context *ctx, int len)
 	if (!ctx->msgbuf.data)
 		buf_len = 0;
 
-	rem = (len % UBUS_MSG_CHUNK_SIZE);
+	rem = (len % HOMEBUS_MSG_CHUNK_SIZE);
 	if (rem > 0)
-		len += UBUS_MSG_CHUNK_SIZE - rem;
+		len += HOMEBUS_MSG_CHUNK_SIZE - rem;
 
 	if (len < buf_len &&
-	    ++ctx->msgbuf_reduction_counter > UBUS_MSGBUF_REDUCTION_INTERVAL) {
+	    ++ctx->msgbuf_reduction_counter > HOMEBUS_MSGBUF_REDUCTION_INTERVAL) {
 		ctx->msgbuf_reduction_counter = 0;
 		buf_len = 0;
 	}
@@ -268,10 +268,10 @@ static bool alloc_msg_buf(struct ubus_context *ctx, int len)
 	return true;
 }
 
-static bool get_next_msg(struct ubus_context *ctx, int *recv_fd)
+static bool get_next_msg(struct homebus_context *ctx, int *recv_fd)
 {
 	struct {
-		struct ubus_msghdr hdr;
+		struct homebus_msghdr hdr;
 		struct blob_attr data;
 	} hdrbuf;
 	struct iovec iov = STATIC_IOV(hdrbuf);
@@ -290,7 +290,7 @@ static bool get_next_msg(struct ubus_context *ctx, int *recv_fd)
 	hdrbuf.hdr.seq = be16_to_cpu(hdrbuf.hdr.seq);
 	hdrbuf.hdr.peer = be32_to_cpu(hdrbuf.hdr.peer);
 
-	if (!ubus_validate_hdr(&hdrbuf.hdr))
+	if (!homebus_validate_hdr(&hdrbuf.hdr))
 		return false;
 
 	len = blob_raw_len(&hdrbuf.data);
@@ -309,9 +309,9 @@ static bool get_next_msg(struct ubus_context *ctx, int *recv_fd)
 	return true;
 }
 
-void __hidden ubus_handle_data(struct uloop_fd *u, unsigned int events)
+void __hidden homebus_handle_data(struct uloop_fd *u, unsigned int events)
 {
-	struct ubus_context *ctx = container_of(u, struct ubus_context, sock);
+	struct homebus_context *ctx = container_of(u, struct homebus_context, sock);
 	int recv_fd = -1;
 
 	while (1) {
@@ -320,7 +320,7 @@ void __hidden ubus_handle_data(struct uloop_fd *u, unsigned int events)
 
 		if (!get_next_msg(ctx, &recv_fd))
 			break;
-		ubus_process_msg(ctx, &ctx->msgbuf, recv_fd);
+		homebus_process_msg(ctx, &ctx->msgbuf, recv_fd);
 		if (uloop_cancelling() || ctx->cancel_poll)
 			break;
 	}
@@ -332,7 +332,7 @@ void __hidden ubus_handle_data(struct uloop_fd *u, unsigned int events)
 		ctx->connection_lost(ctx);
 }
 
-void __hidden ubus_poll_data(struct ubus_context *ctx, int timeout)
+void __hidden homebus_poll_data(struct homebus_context *ctx, int timeout)
 {
 	struct pollfd pfd = {
 		.fd = ctx->sock.fd,
@@ -341,37 +341,37 @@ void __hidden ubus_poll_data(struct ubus_context *ctx, int timeout)
 
 	ctx->cancel_poll = false;
 	poll(&pfd, 1, timeout ? timeout : -1);
-	ubus_handle_data(&ctx->sock, ULOOP_READ);
+	homebus_handle_data(&ctx->sock, ULOOP_READ);
 }
 
 static void
-ubus_auto_sub_lookup(struct ubus_context *ctx, struct ubus_object_data *obj,
+homebus_auto_sub_lookup(struct homebus_context *ctx, struct homebus_object_data *obj,
 		     void *priv)
 {
-	struct ubus_subscriber *s;
+	struct homebus_subscriber *s;
 
 	list_for_each_entry(s, &ctx->auto_subscribers, list)
 		if (s->new_obj_cb(ctx, s, obj->path))
-			ubus_subscribe(ctx, s, obj->id);
+			homebus_subscribe(ctx, s, obj->id);
 }
 
 static void
-ubus_refresh_auto_subscribe(struct ubus_context *ctx)
+homebus_refresh_auto_subscribe(struct homebus_context *ctx)
 {
-	struct ubus_event_handler *ev = &ctx->auto_subscribe_event_handler;
+	struct homebus_event_handler *ev = &ctx->auto_subscribe_event_handler;
 
 	if (list_empty(&ctx->auto_subscribers))
 		return;
 
-	ubus_register_event_handler(ctx, ev, "ubus.object.add");
-	ubus_lookup(ctx, NULL, ubus_auto_sub_lookup, NULL);
+	homebus_register_event_handler(ctx, ev, "homebus.object.add");
+	homebus_lookup(ctx, NULL, homebus_auto_sub_lookup, NULL);
 }
 
 static void
-ubus_refresh_state(struct ubus_context *ctx)
+homebus_refresh_state(struct homebus_context *ctx)
 {
-	struct ubus_object *obj, *tmp;
-	struct ubus_object **objs;
+	struct homebus_object *obj, *tmp;
+	struct homebus_object **objs;
 	int n, i = 0;
 
 	/* clear all type IDs, they need to be registered again */
@@ -387,22 +387,22 @@ ubus_refresh_state(struct ubus_context *ctx)
 	}
 
 	for (n = i, i = 0; i < n; i++)
-		ubus_add_object(ctx, objs[i]);
+		homebus_add_object(ctx, objs[i]);
 
-	ubus_refresh_auto_subscribe(ctx);
+	homebus_refresh_auto_subscribe(ctx);
 }
 
-int ubus_reconnect(struct ubus_context *ctx, const char *path)
+int homebus_reconnect(struct homebus_context *ctx, const char *path)
 {
 	struct {
-		struct ubus_msghdr hdr;
+		struct homebus_msghdr hdr;
 		struct blob_attr data;
 	} hdr;
 	struct blob_attr *buf;
-	int ret = UBUS_STATUS_UNKNOWN_ERROR;
+	int ret = HOMEBUS_STATUS_UNKNOWN_ERROR;
 
 	if (!path)
-		path = UBUS_UNIX_SOCKET;
+		path = HOMEBUS_UNIX_SOCKET;
 
 	if (ctx->sock.fd >= 0) {
 		if (ctx->sock.registered)
@@ -415,15 +415,15 @@ int ubus_reconnect(struct ubus_context *ctx, const char *path)
 	ctx->sock.error = false;
 	ctx->sock.fd = usock(USOCK_UNIX, path, NULL);
 	if (ctx->sock.fd < 0)
-		return UBUS_STATUS_CONNECTION_FAILED;
+		return HOMEBUS_STATUS_CONNECTION_FAILED;
 
 	if (read(ctx->sock.fd, &hdr, sizeof(hdr)) != sizeof(hdr))
 		goto out_close;
 
-	if (!ubus_validate_hdr(&hdr.hdr))
+	if (!homebus_validate_hdr(&hdr.hdr))
 		goto out_close;
 
-	if (hdr.hdr.type != UBUS_MSG_HELLO)
+	if (hdr.hdr.type != HOMEBUS_MSG_HELLO)
 		goto out_close;
 
 	buf = calloc(1, blob_raw_len(&hdr.data));
@@ -438,10 +438,10 @@ int ubus_reconnect(struct ubus_context *ctx, const char *path)
 	if (!ctx->local_id)
 		goto out_free;
 
-	ret = UBUS_STATUS_OK;
+	ret = HOMEBUS_STATUS_OK;
 	fcntl(ctx->sock.fd, F_SETFL, fcntl(ctx->sock.fd, F_GETFL) | O_NONBLOCK | O_CLOEXEC);
 
-	ubus_refresh_state(ctx);
+	homebus_refresh_state(ctx);
 
 out_free:
 	free(buf);

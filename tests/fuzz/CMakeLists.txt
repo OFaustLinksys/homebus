@@ -5,7 +5,7 @@ MACRO(ADD_FUZZER_TEST name)
   TARGET_COMPILE_OPTIONS(${name} PRIVATE -g -O1 -fno-omit-frame-pointer -fsanitize=fuzzer,address,leak,undefined)
   TARGET_INCLUDE_DIRECTORIES(${name} PRIVATE ${PROJECT_SOURCE_DIR})
   TARGET_LINK_OPTIONS(${name} PRIVATE -stdlib=libc++ -fsanitize=fuzzer,address,leak,undefined)
-  TARGET_LINK_LIBRARIES(${name} ubus ubusd_library ${ubox_library} ${blob_library} ${json})
+  TARGET_LINK_LIBRARIES(${name} homebus homebusd_library ${ubox_library} ${blob_library} ${json})
   ADD_TEST(
     NAME ${name}
     COMMAND ${name} -max_len=256 -timeout=10 -max_total_time=300 ${CMAKE_CURRENT_SOURCE_DIR}/corpus

@@ -11,28 +11,28 @@
  * GNU General Public License for more details.
  */
 
-#include "libubus.h"
-#include "libubus-internal.h"
+#include "libhomebus.h"
+#include "libhomebus-internal.h"
 
-static int ubus_subscriber_cb(struct ubus_context *ctx, struct ubus_object *obj,
-			 struct ubus_request_data *req,
+static int homebus_subscriber_cb(struct homebus_context *ctx, struct homebus_object *obj,
+			 struct homebus_request_data *req,
 			 const char *method, struct blob_attr *msg)
 {
-	struct ubus_subscriber *s;
+	struct homebus_subscriber *s;
 
-	s = container_of(obj, struct ubus_subscriber, obj);
+	s = container_of(obj, struct homebus_subscriber, obj);
 	if (s->cb)
 		return s->cb(ctx, obj, req, method, msg);
 	return 0;
 }
 
-const struct ubus_method watch_method __hidden = {
+const struct homebus_method watch_method __hidden = {
 	.name = NULL,
-	.handler = ubus_subscriber_cb,
+	.handler = homebus_subscriber_cb,
 };
 
 static void
-ubus_auto_sub_event_handler_cb(struct ubus_context *ctx,  struct ubus_event_handler *ev,
+homebus_auto_sub_event_handler_cb(struct homebus_context *ctx,  struct homebus_event_handler *ev,
 			       const char *type, struct blob_attr *msg)
 {
 	enum {
@@ -47,7 +47,7 @@ ubus_auto_sub_event_handler_cb(struct ubus_context *ctx,  struct ubus_event_hand
 	};
 
 	struct blob_attr *tb[__EVENT_MAX];
-	struct ubus_subscriber *s;
+	struct homebus_subscriber *s;
 	const char *path;
 	int id;
 
@@ -61,67 +61,67 @@ ubus_auto_sub_event_handler_cb(struct ubus_context *ctx,  struct ubus_event_hand
 
 	list_for_each_entry(s, &ctx->auto_subscribers, list)
 		if (s->new_obj_cb(ctx, s, path))
-			ubus_subscribe(ctx, s, id);
+			homebus_subscribe(ctx, s, id);
 }
 
 static void
-ubus_auto_sub_lookup(struct ubus_context *ctx, struct ubus_object_data *obj,
+homebus_auto_sub_lookup(struct homebus_context *ctx, struct homebus_object_data *obj,
 		     void *priv)
 {
-	struct ubus_subscriber *s = priv;
+	struct homebus_subscriber *s = priv;
 
 	if (s->new_obj_cb(ctx, s, obj->path))
-		ubus_subscribe(ctx, s, obj->id);
+		homebus_subscribe(ctx, s, obj->id);
 }
 
-int ubus_register_subscriber(struct ubus_context *ctx, struct ubus_subscriber *s)
+int homebus_register_subscriber(struct homebus_context *ctx, struct homebus_subscriber *s)
 {
-	struct ubus_object *obj = &s->obj;
+	struct homebus_object *obj = &s->obj;
 	int ret;
 
 	INIT_LIST_HEAD(&s->list);
 	obj->methods = &watch_method;
 	obj->n_methods = 1;
 
-	ret = ubus_add_object(ctx, obj);
+	ret = homebus_add_object(ctx, obj);
 	if (ret)
 		return ret;
 
 	if (s->new_obj_cb) {
-		struct ubus_event_handler *ev = &ctx->auto_subscribe_event_handler;
+		struct homebus_event_handler *ev = &ctx->auto_subscribe_event_handler;
 		list_add(&s->list, &ctx->auto_subscribers);
-		ev->cb = ubus_auto_sub_event_handler_cb;
+		ev->cb = homebus_auto_sub_event_handler_cb;
 		if (!ev->obj.id)
-			ubus_register_event_handler(ctx, ev, "ubus.object.add");
-		ubus_lookup(ctx, NULL, ubus_auto_sub_lookup, s);
+			homebus_register_event_handler(ctx, ev, "homebus.object.add");
+		homebus_lookup(ctx, NULL, homebus_auto_sub_lookup, s);
 	}
 
 	return 0;
 }
 
 static int
-__ubus_subscribe_request(struct ubus_context *ctx, struct ubus_object *obj, uint32_t id, int type)
+__homebus_subscribe_request(struct homebus_context *ctx, struct homebus_object *obj, uint32_t id, int type)
 {
-	struct ubus_request req;
+	struct homebus_request req;
 
 	blob_buf_init(&b, 0);
-	blob_put_int32(&b, UBUS_ATTR_OBJID, obj->id);
-	blob_put_int32(&b, UBUS_ATTR_TARGET, id);
+	blob_put_int32(&b, HOMEBUS_ATTR_OBJID, obj->id);
+	blob_put_int32(&b, HOMEBUS_ATTR_TARGET, id);
 
-	if (ubus_start_request(ctx, &req, b.head, type, 0) < 0)
-		return UBUS_STATUS_INVALID_ARGUMENT;
+	if (homebus_start_request(ctx, &req, b.head, type, 0) < 0)
+		return HOMEBUS_STATUS_INVALID_ARGUMENT;
 
-	return ubus_complete_request(ctx, &req, 0);
+	return homebus_complete_request(ctx, &req, 0);
 
 }
 
-int ubus_subscribe(struct ubus_context *ctx, struct ubus_subscriber *obj, uint32_t id)
+int homebus_subscribe(struct homebus_context *ctx, struct homebus_subscriber *obj, uint32_t id)
 {
-	return __ubus_subscribe_request(ctx, &obj->obj, id, UBUS_MSG_SUBSCRIBE);
+	return __homebus_subscribe_request(ctx, &obj->obj, id, HOMEBUS_MSG_SUBSCRIBE);
 }
 
-int ubus_unsubscribe(struct ubus_context *ctx, struct ubus_subscriber *obj, uint32_t id)
+int homebus_unsubscribe(struct homebus_context *ctx, struct homebus_subscriber *obj, uint32_t id)
 {
-	return __ubus_subscribe_request(ctx, &obj->obj, id, UBUS_MSG_UNSUBSCRIBE);
+	return __homebus_subscribe_request(ctx, &obj->obj, id, HOMEBUS_MSG_UNSUBSCRIBE);
 }
 

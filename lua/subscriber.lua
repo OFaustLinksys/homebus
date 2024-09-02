@@ -1,17 +1,17 @@
 #!/usr/bin/env lua
 
 --[[
-  A demo of ubus subscriber binding. Should be run after publisher.lua
+  A demo of homebus subscriber binding. Should be run after publisher.lua
 --]]
 
-require "ubus"
+require "homebus"
 require "uloop"
 
 uloop.init()
 
-local conn = ubus.connect()
+local conn = homebus.connect()
 if not conn then
-	error("Failed to connect to ubus")
+	error("Failed to connect to homebus")
 end
 
 local sub = {

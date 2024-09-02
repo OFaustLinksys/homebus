@@ -15,11 +15,11 @@
 #include <signal.h>
 
 #include <libubox/blobmsg_json.h>
-#include "libubus.h"
+#include "libhomebus.h"
 #include "count.h"
 
-static struct ubus_context *ctx;
-static struct ubus_subscriber test_event;
+static struct homebus_context *ctx;
+static struct homebus_subscriber test_event;
 static struct blob_buf b;
 
 enum {
@@ -34,7 +34,7 @@ static const struct blobmsg_policy hello_policy[] = {
 };
 
 struct hello_request {
-	struct ubus_request_data req;
+	struct homebus_request_data req;
 	struct uloop_timeout timeout;
 	int fd;
 	int idx;
@@ -64,22 +64,22 @@ static void test_hello_reply(struct uloop_timeout *t)
 
 	blob_buf_init(&b, 0);
 	blobmsg_add_string(&b, "message", req->data);
-	ubus_send_reply(ctx, &req->req, b.head);
+	homebus_send_reply(ctx, &req->req, b.head);
 
 	if (pipe(fds) == -1) {
 		fprintf(stderr, "Failed to create pipe\n");
 		return;
 	}
-	ubus_request_set_fd(ctx, &req->req, fds[0]);
-	ubus_complete_deferred_request(ctx, &req->req, 0);
+	homebus_request_set_fd(ctx, &req->req, fds[0]);
+	homebus_complete_deferred_request(ctx, &req->req, 0);
 	req->fd = fds[1];
 
 	req->timeout.cb = test_hello_fd_reply;
 	test_hello_fd_reply(t);
 }
 
-static int test_hello(struct ubus_context *ctx, struct ubus_object *obj,
-		      struct ubus_request_data *req, const char *method,
+static int test_hello(struct homebus_context *ctx, struct homebus_object *obj,
+		      struct homebus_request_data *req, const char *method,
 		      struct blob_attr *msg)
 {
 	struct hello_request *hreq;
@@ -95,10 +95,10 @@ static int test_hello(struct ubus_context *ctx, struct ubus_object *obj,
 	size_t len = sizeof(*hreq) + sizeof(format) + strlen(obj->name) + strlen(msgstr) + 1;
 	hreq = calloc(1, len);
 	if (!hreq)
-		return UBUS_STATUS_UNKNOWN_ERROR;
+		return HOMEBUS_STATUS_UNKNOWN_ERROR;
 
 	snprintf(hreq->data, len, format, obj->name, msgstr);
-	ubus_defer_request(ctx, req, &hreq->req);
+	homebus_defer_request(ctx, req, &hreq->req);
 	hreq->timeout.cb = test_hello_reply;
 	uloop_timeout_set(&hreq->timeout, 1000);
 
@@ -117,15 +117,15 @@ static const struct blobmsg_policy watch_policy[__WATCH_MAX] = {
 };
 
 static void
-test_handle_remove(struct ubus_context *ctx, struct ubus_subscriber *s,
+test_handle_remove(struct homebus_context *ctx, struct homebus_subscriber *s,
                    uint32_t id)
 {
 	fprintf(stderr, "Object %08x went away\n", id);
 }
 
 static int
-test_notify(struct ubus_context *ctx, struct ubus_object *obj,
-	    struct ubus_request_data *req, const char *method,
+test_notify(struct homebus_context *ctx, struct homebus_object *obj,
+	    struct homebus_request_data *req, const char *method,
 	    struct blob_attr *msg)
 {
 #if 0
@@ -139,8 +139,8 @@ test_notify(struct ubus_context *ctx, struct ubus_object *obj,
 	return 0;
 }
 
-static int test_watch(struct ubus_context *ctx, struct ubus_object *obj,
-		      struct ubus_request_data *req, const char *method,
+static int test_watch(struct homebus_context *ctx, struct homebus_object *obj,
+		      struct homebus_request_data *req, const char *method,
 		      struct blob_attr *msg)
 {
 	struct blob_attr *tb[__WATCH_MAX];
@@ -148,12 +148,12 @@ static int test_watch(struct ubus_context *ctx, struct ubus_object *obj,
 
 	blobmsg_parse(watch_policy, __WATCH_MAX, tb, blob_data(msg), blob_len(msg));
 	if (!tb[WATCH_ID])
-		return UBUS_STATUS_INVALID_ARGUMENT;
+		return HOMEBUS_STATUS_INVALID_ARGUMENT;
 
 	test_event.remove_cb = test_handle_remove;
 	test_event.cb = test_notify;
-	ret = ubus_subscribe(ctx, &test_event, blobmsg_get_u32(tb[WATCH_ID]));
-	fprintf(stderr, "Watching object %08x: %s\n", blobmsg_get_u32(tb[WATCH_ID]), ubus_strerror(ret));
+	ret = homebus_subscribe(ctx, &test_event, blobmsg_get_u32(tb[WATCH_ID]));
+	fprintf(stderr, "Watching object %08x: %s\n", blobmsg_get_u32(tb[WATCH_ID]), homebus_strerror(ret));
 	return ret;
 }
 
@@ -168,8 +168,8 @@ static const struct blobmsg_policy count_policy[__COUNT_MAX] = {
     [COUNT_STRING] = { .name = "string", .type = BLOBMSG_TYPE_STRING },
 };
 
-static int test_count(struct ubus_context *ctx, struct ubus_object *obj,
-		      struct ubus_request_data *req, const char *method,
+static int test_count(struct homebus_context *ctx, struct homebus_object *obj,
+		      struct homebus_request_data *req, const char *method,
 		      struct blob_attr *msg)
 {
 	struct blob_attr *tb[__COUNT_MAX];
@@ -178,33 +178,33 @@ static int test_count(struct ubus_context *ctx, struct ubus_object *obj,
 
 	blobmsg_parse(count_policy, __COUNT_MAX, tb, blob_data(msg), blob_len(msg));
 	if (!tb[COUNT_TO] || !tb[COUNT_STRING])
-		return UBUS_STATUS_INVALID_ARGUMENT;
+		return HOMEBUS_STATUS_INVALID_ARGUMENT;
 
 	num = blobmsg_get_u32(tb[COUNT_TO]);
 	s1 = blobmsg_get_string(tb[COUNT_STRING]);
 	s2 = count_to_number(num);
 	if (!s1 || !s2) {
 		free(s2);
-		return UBUS_STATUS_UNKNOWN_ERROR;
+		return HOMEBUS_STATUS_UNKNOWN_ERROR;
 	}
 	blob_buf_init(&b, 0);
 	blobmsg_add_u32(&b, "rc", strcmp(s1, s2));
-	ubus_send_reply(ctx, req, b.head);
+	homebus_send_reply(ctx, req, b.head);
 	free(s2);
 
 	return 0;
 }
 
-static const struct ubus_method test_methods[] = {
-	UBUS_METHOD("hello", test_hello, hello_policy),
-	UBUS_METHOD("watch", test_watch, watch_policy),
-	UBUS_METHOD("count", test_count, count_policy),
+static const struct homebus_method test_methods[] = {
+	HOMEBUS_METHOD("hello", test_hello, hello_policy),
+	HOMEBUS_METHOD("watch", test_watch, watch_policy),
+	HOMEBUS_METHOD("count", test_count, count_policy),
 };
 
-static struct ubus_object_type test_object_type =
-	UBUS_OBJECT_TYPE("test", test_methods);
+static struct homebus_object_type test_object_type =
+	HOMEBUS_OBJECT_TYPE("test", test_methods);
 
-static struct ubus_object test_object = {
+static struct homebus_object test_object = {
 	.name = "test",
 	.type = &test_object_type,
 	.methods = test_methods,
@@ -215,26 +215,26 @@ static void server_main(void)
 {
 	int ret;
 
-	ret = ubus_add_object(ctx, &test_object);
+	ret = homebus_add_object(ctx, &test_object);
 	if (ret)
-		fprintf(stderr, "Failed to add object: %s\n", ubus_strerror(ret));
+		fprintf(stderr, "Failed to add object: %s\n", homebus_strerror(ret));
 
-	ret = ubus_register_subscriber(ctx, &test_event);
+	ret = homebus_register_subscriber(ctx, &test_event);
 	if (ret)
-		fprintf(stderr, "Failed to add watch handler: %s\n", ubus_strerror(ret));
+		fprintf(stderr, "Failed to add watch handler: %s\n", homebus_strerror(ret));
 
 	uloop_run();
 }
 
 int main(int argc, char **argv)
 {
-	const char *ubus_socket = NULL;
+	const char *homebus_socket = NULL;
 	int ch;
 
 	while ((ch = getopt(argc, argv, "cs:")) != -1) {
 		switch (ch) {
 		case 's':
-			ubus_socket = optarg;
+			homebus_socket = optarg;
 			break;
 		default:
 			break;
@@ -244,17 +244,17 @@ int main(int argc, char **argv)
 	uloop_init();
 	signal(SIGPIPE, SIG_IGN);
 
-	ctx = ubus_connect(ubus_socket);
+	ctx = homebus_connect(homebus_socket);
 	if (!ctx) {
-		fprintf(stderr, "Failed to connect to ubus\n");
+		fprintf(stderr, "Failed to connect to homebus\n");
 		return -1;
 	}
 
-	ubus_add_uloop(ctx);
+	homebus_add_uloop(ctx);
 
 	server_main();
 
-	ubus_free(ctx);
+	homebus_free(ctx);
 	uloop_done();
 
 	return 0;

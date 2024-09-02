@@ -1,13 +1,13 @@
 #!/usr/bin/env lua
 
-require "ubus"
+require "homebus"
 require "uloop"
 
 uloop.init()
 
-local conn = ubus.connect()
+local conn = homebus.connect()
 if not conn then
-	error("Failed to connect to ubus")
+	error("Failed to connect to homebus")
 end
 
 local my_method = {
@@ -26,14 +26,14 @@ local my_method = {
 				for k, v in pairs(msg) do
 					print("key=" .. k .. " value=" .. tostring(v))
 				end
-			end, {id = ubus.INT32, msg = ubus.STRING }
+			end, {id = homebus.INT32, msg = homebus.STRING }
 		},
 		hello1 = {
 			function(req)
 				conn:reply(req, {message="foo1"});
 				conn:reply(req, {message="foo2"});
 				print("Call to function 'hello1'")
-			end, {id = ubus.INT32, msg = ubus.STRING }
+			end, {id = homebus.INT32, msg = homebus.STRING }
 		},
 		deferred = {
 			function(req)

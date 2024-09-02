@@ -1,13 +1,13 @@
 #!/usr/bin/env lua
 
-require "ubus"
+require "homebus"
 require "uloop"
 
 uloop.init()
 
-local conn = ubus.connect()
+local conn = homebus.connect()
 if not conn then
-	error("Failed to connect to ubusd")
+	error("Failed to connect to homebusd")
 end
 
 local namespaces = conn:objects()

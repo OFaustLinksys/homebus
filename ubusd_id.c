@@ -17,12 +17,12 @@
 #include <fcntl.h>
 #include <libubox/avl-cmp.h>
 
-#include "ubusmsg.h"
-#include "ubusd_id.h"
+#include "homebusmsg.h"
+#include "homebusd_id.h"
 
 static int random_fd = -1;
 
-static int ubus_cmp_id(const void *k1, const void *k2, void *ptr)
+static int homebus_cmp_id(const void *k1, const void *k2, void *ptr)
 {
 	const uint32_t *id1 = k1, *id2 = k2;
 
@@ -32,12 +32,12 @@ static int ubus_cmp_id(const void *k1, const void *k2, void *ptr)
 		return *id1 > *id2;
 }
 
-void ubus_init_string_tree(struct avl_tree *tree, bool dup)
+void homebus_init_string_tree(struct avl_tree *tree, bool dup)
 {
 	avl_init(tree, avl_strcmp, dup, NULL);
 }
 
-void ubus_init_id_tree(struct avl_tree *tree)
+void homebus_init_id_tree(struct avl_tree *tree)
 {
 	if (random_fd < 0) {
 		random_fd = open("/dev/urandom", O_RDONLY);
@@ -47,10 +47,10 @@ void ubus_init_id_tree(struct avl_tree *tree)
 		}
 	}
 
-	avl_init(tree, ubus_cmp_id, false, NULL);
+	avl_init(tree, homebus_cmp_id, false, NULL);
 }
 
-bool ubus_alloc_id(struct avl_tree *tree, struct ubus_id *id, uint32_t val)
+bool homebus_alloc_id(struct avl_tree *tree, struct homebus_id *id, uint32_t val)
 {
 	id->avl.key = &id->id;
 	if (val) {
@@ -62,7 +62,7 @@ bool ubus_alloc_id(struct avl_tree *tree, struct ubus_id *id, uint32_t val)
 		if (read(random_fd, &id->id, sizeof(id->id)) != sizeof(id->id))
 			return false;
 
-		if (id->id < UBUS_SYSTEM_OBJECT_MAX)
+		if (id->id < HOMEBUS_SYSTEM_OBJECT_MAX)
 			continue;
 	} while (avl_insert(tree, &id->avl) != 0);
 

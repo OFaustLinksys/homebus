@@ -16,18 +16,18 @@
 
 #include <libubox/ustream.h>
 
-#include "libubus.h"
+#include "libhomebus.h"
 #include "count.h"
 
-static struct ubus_context *ctx;
+static struct homebus_context *ctx;
 static struct blob_buf b;
 
-static void test_client_subscribe_cb(struct ubus_context *ctx, struct ubus_object *obj)
+static void test_client_subscribe_cb(struct homebus_context *ctx, struct homebus_object *obj)
 {
 	fprintf(stderr, "Subscribers active: %d\n", obj->has_subscribers);
 }
 
-static struct ubus_object test_client_object = {
+static struct homebus_object test_client_object = {
 	.subscribe_cb = test_client_subscribe_cb,
 };
 
@@ -45,10 +45,10 @@ static void test_client_notify_cb(struct uloop_timeout *timeout)
 
 	gettimeofday(&tv1, NULL);
 	for (i = 0; i < max; i++)
-		err = ubus_notify(ctx, &test_client_object, "ping", b.head, 1000);
+		err = homebus_notify(ctx, &test_client_object, "ping", b.head, 1000);
 	gettimeofday(&tv2, NULL);
 	if (err)
-		fprintf(stderr, "Notify failed: %s\n", ubus_strerror(err));
+		fprintf(stderr, "Notify failed: %s\n", homebus_strerror(err));
 
 	delta = (tv2.tv_sec - tv1.tv_sec) * 1000000 + (tv2.tv_usec - tv1.tv_usec);
 	fprintf(stderr, "Avg time per iteration: %ld usec\n", delta / max);
@@ -65,7 +65,7 @@ static const struct blobmsg_policy return_policy[__RETURN_MAX] = {
 	[RETURN_CODE] = { .name = "rc", .type = BLOBMSG_TYPE_INT32 },
 };
 
-static void test_count_data_cb(struct ubus_request *req,
+static void test_count_data_cb(struct homebus_request *req,
 				    int type, struct blob_attr *msg)
 {
 	struct blob_attr *tb[__RETURN_MAX];
@@ -117,13 +117,13 @@ static void test_count(struct uloop_timeout *timeout)
 	blobmsg_add_u32(&b, "to", count_to);
 	blobmsg_add_string(&b, "string", s);
 
-	if (ubus_lookup_id(ctx, "test", &id)) {
+	if (homebus_lookup_id(ctx, "test", &id)) {
 		free(s);
 		fprintf(stderr, "Failed to look up test object\n");
 		return;
 	}
 
-	ubus_invoke(ctx, id, "count", b.head, test_count_data_cb, &count_to, 5000);
+	homebus_invoke(ctx, id, "count", b.head, test_count_data_cb, &count_to, 5000);
 
 	free(s);
 
@@ -156,7 +156,7 @@ static void test_client_fd_data_cb(struct ustream *s, int bytes)
 	ustream_consume(s, sep + 1 - data);
 }
 
-static void test_client_fd_cb(struct ubus_request *req, int fd)
+static void test_client_fd_cb(struct homebus_request *req, int fd)
 {
 	static struct ustream_fd test_fd;
 
@@ -166,39 +166,39 @@ static void test_client_fd_cb(struct ubus_request *req, int fd)
 	ustream_fd_init(&test_fd, fd);
 }
 
-static void test_client_complete_cb(struct ubus_request *req, int ret)
+static void test_client_complete_cb(struct homebus_request *req, int ret)
 {
 	fprintf(stderr, "completed request, ret: %d\n", ret);
 }
 
 static void client_main(void)
 {
-	static struct ubus_request req;
+	static struct homebus_request req;
 	uint32_t id;
 	int ret;
 
-	ret = ubus_add_object(ctx, &test_client_object);
+	ret = homebus_add_object(ctx, &test_client_object);
 	if (ret) {
-		fprintf(stderr, "Failed to add_object object: %s\n", ubus_strerror(ret));
+		fprintf(stderr, "Failed to add_object object: %s\n", homebus_strerror(ret));
 		return;
 	}
 
-	if (ubus_lookup_id(ctx, "test", &id)) {
+	if (homebus_lookup_id(ctx, "test", &id)) {
 		fprintf(stderr, "Failed to look up test object\n");
 		return;
 	}
 
 	blob_buf_init(&b, 0);
 	blobmsg_add_u32(&b, "id", test_client_object.id);
-	ubus_invoke(ctx, id, "watch", b.head, NULL, 0, 3000);
+	homebus_invoke(ctx, id, "watch", b.head, NULL, 0, 3000);
 	test_client_notify_cb(&notify_timer);
 
 	blob_buf_init(&b, 0);
 	blobmsg_add_string(&b, "msg", "blah");
-	ubus_invoke_async(ctx, id, "hello", b.head, &req);
+	homebus_invoke_async(ctx, id, "hello", b.head, &req);
 	req.fd_cb = test_client_fd_cb;
 	req.complete_cb = test_client_complete_cb;
-	ubus_complete_request_async(ctx, &req);
+	homebus_complete_request_async(ctx, &req);
 
 	uloop_timeout_set(&count_timer, 2000);
 
@@ -207,13 +207,13 @@ static void client_main(void)
 
 int main(int argc, char **argv)
 {
-	const char *ubus_socket = NULL;
+	const char *homebus_socket = NULL;
 	int ch;
 
 	while ((ch = getopt(argc, argv, "cs:")) != -1) {
 		switch (ch) {
 		case 's':
-			ubus_socket = optarg;
+			homebus_socket = optarg;
 			break;
 		default:
 			break;
@@ -222,17 +222,17 @@ int main(int argc, char **argv)
 
 	uloop_init();
 
-	ctx = ubus_connect(ubus_socket);
+	ctx = homebus_connect(homebus_socket);
 	if (!ctx) {
-		fprintf(stderr, "Failed to connect to ubus\n");
+		fprintf(stderr, "Failed to connect to homebus\n");
 		return -1;
 	}
 
-	ubus_add_uloop(ctx);
+	homebus_add_uloop(ctx);
 
 	client_main();
 
-	ubus_free(ctx);
+	homebus_free(ctx);
 	uloop_done();
 
 	return 0;

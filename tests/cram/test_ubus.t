@@ -1,12 +1,12 @@
 set environment for convenience:
 
   $ [ -n "$TEST_BIN_DIR" ] && export PATH="$TEST_BIN_DIR:$PATH"
-  $ alias ubus='valgrind --quiet --leak-check=full ubus'
+  $ alias homebus='valgrind --quiet --leak-check=full homebus'
 
 check usage:
 
-  $ ubus
-  Usage: ubus [<options>] <command> [arguments...]
+  $ homebus
+  Usage: homebus [<options>] <command> [arguments...]
   Options:
    -s <socket>:\t\tSet the unix domain socket to connect to (esc)
    -t <timeout>:\t\tSet the timeout (in seconds) for a command to complete (esc)
@@ -22,13 +22,13 @@ check usage:
    - subscribe <path> [<path>...]\tSubscribe to object(s) notifications (esc)
    - listen [<path>...]\t\t\tListen for events (esc)
    - send <type> [<message>]\t\tSend an event (esc)
-   - wait_for <object> [<object>...]\tWait for multiple objects to appear on ubus (esc)
-   - monitor\t\t\t\tMonitor ubus traffic (esc)
+   - wait_for <object> [<object>...]\tWait for multiple objects to appear on homebus (esc)
+   - monitor\t\t\t\tMonitor homebus traffic (esc)
   
   [1]
 
-  $ ubus-san
-  Usage: ubus-san [<options>] <command> [arguments...]
+  $ homebus-san
+  Usage: homebus-san [<options>] <command> [arguments...]
   Options:
    -s <socket>:\t\tSet the unix domain socket to connect to (esc)
    -t <timeout>:\t\tSet the timeout (in seconds) for a command to complete (esc)
@@ -44,17 +44,17 @@ check usage:
    - subscribe <path> [<path>...]\tSubscribe to object(s) notifications (esc)
    - listen [<path>...]\t\t\tListen for events (esc)
    - send <type> [<message>]\t\tSend an event (esc)
-   - wait_for <object> [<object>...]\tWait for multiple objects to appear on ubus (esc)
-   - monitor\t\t\t\tMonitor ubus traffic (esc)
+   - wait_for <object> [<object>...]\tWait for multiple objects to appear on homebus (esc)
+   - monitor\t\t\t\tMonitor homebus traffic (esc)
   
   [1]
 
 check monitor command:
 
-  $ ubus monitor
-  Failed to connect to ubus
+  $ homebus monitor
+  Failed to connect to homebus
   [255]
 
-  $ ubus-san monitor
-  Failed to connect to ubus
+  $ homebus-san monitor
+  Failed to connect to homebus
   [255]

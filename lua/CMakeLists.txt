@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 2.6)
 
-PROJECT(ubus C)
+PROJECT(homebus C)
 
 SET(CMAKE_INSTALL_PREFIX /)
 
@@ -39,14 +39,14 @@ IF(NOT LUAPATH)
 ENDIF()
 
 IF(BUILD_LUA)
-	ADD_LIBRARY(ubus_lua MODULE ubus.c)
-	SET_TARGET_PROPERTIES(ubus_lua PROPERTIES
-		OUTPUT_NAME ubus
+	ADD_LIBRARY(homebus_lua MODULE homebus.c)
+	SET_TARGET_PROPERTIES(homebus_lua PROPERTIES
+		OUTPUT_NAME homebus
 		PREFIX ""
 	)
-	TARGET_LINK_LIBRARIES(ubus_lua ubus)
+	TARGET_LINK_LIBRARIES(homebus_lua homebus)
 
-	INSTALL(TARGETS ubus_lua
+	INSTALL(TARGETS homebus_lua
 		LIBRARY DESTINATION ${LUAPATH}
 	)
 ENDIF()
